@@ -1,0 +1,7 @@
+{
+  "A320": { "wake": "M", "climbRate": 2200, "descentRate": 1800, "vMin": 160, "vApp": 137, "vMax": 320 },
+  "B738": { "wake": "M", "climbRate": 2100, "descentRate": 1900, "vMin": 160, "vApp": 141, "vMax": 320 },
+  "E190": { "wake": "M", "climbRate": 2300, "descentRate": 1900, "vMin": 150, "vApp": 126, "vMax": 300 },
+  "DH8D": { "wake": "M", "climbRate": 1500, "descentRate": 1500, "vMin": 130, "vApp": 115, "vMax": 245 },
+  "B77W": { "wake": "H", "climbRate": 2000, "descentRate": 1700, "vMin": 170, "vApp": 149, "vMax": 320 }
+}

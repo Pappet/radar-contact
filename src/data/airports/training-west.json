@@ -1,0 +1,24 @@
+{
+  "name": "TRAINING WEST",
+  "towerFreq": "118.1",
+  "runways": [{ "id": "14", "thr": [0, 0], "course": 137, "gsAngle": 3.0 }],
+  "fixes": { "AMIKI": [-30, 2], "NOKRA": [-2, 32], "RILAX": [26, 22], "OKTAV": [-14, 8] },
+  "stars": [
+    { "name": "AMIKI 1A", "route": ["AMIKI", "OKTAV"], "entryAlt": 8000 },
+    { "name": "NOKRA 2B", "route": ["NOKRA", "OKTAV"], "entryAlt": 9000 },
+    { "name": "RILAX 1C", "route": ["RILAX"], "entryAlt": 9000 }
+  ],
+  "mva": [
+    { "polygon": [[-45, -45], [45, -45], [45, 45], [-45, 45]], "minAlt": 3000 },
+    { "polygon": [[12, 8], [42, 8], [42, 38], [12, 38]], "minAlt": 5000 }
+  ],
+  "windProfile": { "surface": { "dir": 140, "kt": 8 }, "fl100": { "dir": 210, "kt": 35 } },
+  "spawn": [
+    { "t": 20, "callsign": "SWR34K", "type": "A320", "star": "AMIKI 1A" },
+    { "t": 140, "callsign": "DLH4TA", "type": "B738", "star": "RILAX 1C" },
+    { "t": 260, "callsign": "EZS61B", "type": "A320", "star": "NOKRA 2B" },
+    { "t": 380, "callsign": "AUA904", "type": "E190", "star": "AMIKI 1A" },
+    { "t": 500, "callsign": "SWR17E", "type": "B77W", "star": "RILAX 1C" },
+    { "t": 620, "callsign": "GAC22", "type": "DH8D", "star": "NOKRA 2B" }
+  ]
+}
