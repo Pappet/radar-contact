@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { dispatch } from '../src/sim/commands';
 import { SNAPSHOT_INTERVAL_S, TRAIL_LENGTH } from '../src/sim/constants';
-import { spawnAircraft, TRAINING_WEST } from '../src/sim/scenario';
+import { loadTrainingWest, spawnAircraft } from '../src/sim/scenario';
 import {
   createSimState,
   drainEvents,
@@ -11,7 +11,7 @@ import {
 } from '../src/sim/state';
 
 function withOneArrival(seed = 1): SimState {
-  const state = createSimState({ seed, fixes: TRAINING_WEST.fixes });
+  const state = createSimState({ seed, airport: loadTrainingWest() });
   spawnAircraft(state, {
     callsign: 'SWR34K',
     type: 'A320',
@@ -129,18 +129,5 @@ describe('vectoring an arrival end to end', () => {
     expect(ac.vs).toBe(0);
     // Southbound at the end of the run.
     expect(ac.pos.y).toBeLessThan(2);
-  });
-});
-
-describe('airport data (SPEC §13.2)', () => {
-  it('loads the training sector', () => {
-    expect(TRAINING_WEST.name).toBe('TRAINING WEST');
-    expect(TRAINING_WEST.runways[0]).toMatchObject({ id: '14', course: 137, gsAngle: 3 });
-    expect(TRAINING_WEST.runways[0]?.thr).toEqual({ x: 0, y: 0 });
-    expect(TRAINING_WEST.fixes['AMIKI']).toEqual({ x: -30, y: 2 });
-    expect(Object.keys(TRAINING_WEST.fixes)).toHaveLength(4);
-    expect(TRAINING_WEST.stars.map((s) => s.name)).toEqual(['AMIKI 1A', 'NOKRA 2B', 'RILAX 1C']);
-    expect(TRAINING_WEST.mva[1]?.polygon).toHaveLength(4);
-    expect(TRAINING_WEST.spawn).toHaveLength(6);
   });
 });

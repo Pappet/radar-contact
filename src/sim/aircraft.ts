@@ -80,6 +80,8 @@ export interface AircraftState {
   labelOffset: Vec2;
   /** Last snapshot positions, oldest first (SPEC §3) */
   trail: Vec2[];
+  /** Fixes still to be flown on the STAR, in order (SPEC §7) */
+  route: string[];
   /** STAR the aircraft arrived on, used for the initial call (SPEC §10) */
   star?: string;
 }

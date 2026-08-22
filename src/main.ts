@@ -1,23 +1,20 @@
 /**
  * Loop and wiring (SPEC §3). requestAnimationFrame drives rendering; the
  * simulation runs on an accumulator with a fixed one-second tick.
- *
- * M1 flies a single hardcoded arrival — the spawn schedule of the airport file
- * is wired up in M2 (SPEC §14).
  */
 
 import './style.css';
 import { TICK_SECONDS } from './sim/constants';
-import { dispatch } from './sim/commands';
+import { dispatch, type Command } from './sim/commands';
 import { CALM } from './sim/physics';
-import { spawnAircraft, TRAINING_WEST } from './sim/scenario';
+import { AirportValidationError, loadTrainingWest, type Airport } from './sim/scenario';
 import { createSimState, drainEvents, emit, setLabelOffset, tick } from './sim/state';
-import { bearingTo } from './sim/geo';
 import { createScope } from './radar/scope';
 import { THEME_NAMES, THEMES, type ThemeName } from './radar/theme';
 import { buildLayout, formatSimClock, TIME_SCALES, type TimeScale } from './ui/layout';
 import { createRadioLog } from './ui/radio';
 import { createConsole } from './ui/console';
+import { createCommandPanel, type PanelView } from './ui/cmdpanel';
 import { pilotSayAgain } from './phraseology';
 
 const MAX_TICKS_PER_FRAME = 60;
@@ -38,29 +35,64 @@ function applyTheme(theme: ThemeName): void {
   style.setProperty('--alarm', palette.alarm);
 }
 
+/** A broken airport file must say what is wrong, not fail silently (SPEC §13.2). */
+function reportLoadFailure(mount: HTMLElement, error: unknown): void {
+  const issues =
+    error instanceof AirportValidationError
+      ? error.issues
+      : [error instanceof Error ? error.message : String(error)];
+  mount.innerHTML = `
+    <div class="fatal">
+      <h1>Airport data rejected</h1>
+      <p>training-west.json did not pass validation:</p>
+      <ul></ul>
+    </div>
+  `;
+  const list = mount.querySelector('ul');
+  for (const issue of issues) {
+    const item = document.createElement('li');
+    item.textContent = issue;
+    list?.appendChild(item);
+  }
+}
+
 function main(): void {
   const mount = document.querySelector<HTMLElement>('#app');
   if (!mount) throw new Error('#app missing');
 
-  const airport = TRAINING_WEST;
+  let airport: Airport;
+  try {
+    airport = loadTrainingWest();
+  } catch (error) {
+    reportLoadFailure(mount, error);
+    return;
+  }
+
   const layout = buildLayout(mount);
   const radio = createRadioLog(layout.radioPane);
 
   const state = createSimState({
     seed: seedFromLocation(),
-    // M1 runs without wind; the profile is live from M3 (SPEC §14).
+    airport,
+    // Wind stays calm until M3 (SPEC §14).
     wind: CALM,
-    fixes: airport.fixes,
-    towerFreq: airport.towerFreq,
   });
+
+  const transmit = (callsign: string, commands: Command[]): void => {
+    const result = dispatch(state, callsign, commands);
+    commandConsole.setHint(
+      result.ok ? `${result.callsign} — transmitted` : `No contact: ${callsign}`,
+    );
+  };
+
+  const panel = createCommandPanel(layout.selectionPane, { onCommands: transmit });
 
   const scope = createScope(layout.scopePane, airport, {
     onSelect: (id) => {
+      selectedId = id;
       const ac = state.aircraft.find((a) => a.id === id);
-      layout.selectionPane.textContent = ac
-        ? `Selected ${ac.callsign} · ${ac.type} · ${Math.round(ac.altitude)} ft · ${Math.round(ac.ias)} kt`
-        : 'No aircraft selected';
       if (ac) commandConsole.setPrefill(`${ac.callsign} `);
+      updatePanel();
     },
     onLabelDrag: (id, offset) => setLabelOffset(state, id, offset),
   });
@@ -79,32 +111,37 @@ function main(): void {
         commandConsole.setHint(result.message);
         return;
       }
-      const dispatched = dispatch(state, result.callsign, result.commands);
-      commandConsole.setHint(
-        dispatched.ok ? `${dispatched.callsign} — transmitted` : `No contact: ${result.callsign}`,
-      );
+      transmit(result.callsign, result.commands);
     },
   });
 
-  // --- M1 test traffic: one A320 inbound on the AMIKI 1A arrival. ---
-  const amiki = airport.fixes['AMIKI'] ?? { x: -30, y: 2 };
-  const oktav = airport.fixes['OKTAV'] ?? { x: -14, y: 8 };
-  spawnAircraft(state, {
-    callsign: 'SWR34K',
-    type: 'A320',
-    pos: amiki,
-    altitude: 8000,
-    heading: bearingTo(amiki, oktav),
-    ias: 250,
-    targetAltitude: 8000,
-    star: 'AMIKI 1A',
-  });
+  let selectedId: string | null = null;
+
+  function updatePanel(): void {
+    const ac = state.aircraft.find((a) => a.id === selectedId);
+    if (!ac || ac.phase === 'DONE') {
+      panel.update(null);
+      return;
+    }
+    const view: PanelView = {
+      callsign: ac.callsign,
+      type: ac.type,
+      altitude: ac.altitude,
+      heading: ac.heading,
+      ias: ac.ias,
+      targetAltitude: ac.target.altitude,
+      targetSpeed: ac.target.speed,
+      ...(ac.target.heading ? { targetHeading: ac.target.heading.deg } : {}),
+    };
+    panel.update(view);
+  }
 
   let theme: ThemeName = 'classic';
   let timeScale: TimeScale = 1;
   let paused = false;
 
   applyTheme(theme);
+  panel.setPalette(THEMES[theme]);
   layout.seedLabel.textContent = `seed ${state.seed}`;
 
   function syncRateButtons(): void {
@@ -131,6 +168,7 @@ function main(): void {
     theme = THEME_NAMES[(THEME_NAMES.indexOf(theme) + 1) % THEME_NAMES.length] ?? 'classic';
     applyTheme(theme);
     scope.setTheme(theme);
+    panel.setPalette(THEMES[theme]);
     layout.themeButton.textContent = `Theme: ${theme}`;
   });
   syncRateButtons();
@@ -153,13 +191,26 @@ function main(): void {
     }
 
     for (const record of drainEvents(state)) {
-      if (record.event.kind === 'transmission') {
-        radio.append(record.at, record.event.from, record.event.text);
+      const event = record.event;
+      switch (event.kind) {
+        case 'transmission':
+          radio.append(record.at, event.from, event.text);
+          break;
+        case 'separationLoss':
+          radio.note(record.at, `SEPARATION LOSS — ${event.a} / ${event.b}`);
+          break;
+        case 'mvaViolation':
+          radio.note(record.at, `MVA — ${event.callsign} below minimum vectoring altitude`);
+          break;
+        default:
+          // STCA blinks on the scope; spawns announce themselves on the radio.
+          break;
       }
     }
 
     layout.clock.textContent = formatSimClock(state.time);
     scope.render(state.snapshot);
+    updatePanel();
     requestAnimationFrame(frame);
   }
 

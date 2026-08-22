@@ -17,7 +17,7 @@ import { clamp } from './geo';
 import { phaseAfterCommand } from './phases';
 import { pilotReadback, pilotUnable } from '../phraseology';
 import { randomNormal } from './rng';
-import type { SimState } from './state';
+import { towerFrequency, type SimState } from './state';
 
 /** SPEC §6: N(3.5, 1) seconds of sim time, clamped to [2, 6]. */
 export function pilotDelaySeconds(state: SimState): number {
@@ -111,7 +111,7 @@ export function processPilotQueue(state: SimState, ac: AircraftState): void {
           callsign: ac.callsign,
           altitude: ac.altitude,
           ias: ac.ias,
-          towerFreq: state.towerFreq,
+          towerFreq: towerFrequency(state),
         }),
       });
       for (const cmd of accepted) applyCommand(ac, cmd, profile);

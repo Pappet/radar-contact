@@ -79,8 +79,42 @@ body {
 .selection {
   padding: 8px;
   border-top: 1px solid var(--map);
-  opacity: 0.8;
 }
+
+.panel-empty { opacity: 0.5; }
+.panel-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.panel-callsign { color: var(--accent); font-size: 15px; letter-spacing: 1px; }
+.panel-type { opacity: 0.6; font-size: 11px; }
+.panel-grid { display: flex; gap: 10px; align-items: center; }
+.panel-rose { cursor: crosshair; flex: none; }
+.panel-controls { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.panel-row { display: flex; gap: 4px; align-items: center; }
+.panel-speeds { flex-wrap: wrap; }
+.panel-alt {
+  width: 68px;
+  font: inherit;
+  text-align: center;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--map);
+  border-radius: 3px;
+  padding: 3px 4px;
+  outline: none;
+}
+.panel-alt:focus { border-color: var(--accent); }
+/* Clicked but not yet read back by the pilot. */
+.panel-alt.pending { color: var(--accent); border-color: var(--accent); }
+
+.fatal {
+  max-width: 70ch;
+  margin: 10vh auto;
+  padding: 0 24px;
+  color: var(--alarm);
+  line-height: 1.5;
+}
+.fatal h1 { font-size: 18px; letter-spacing: 2px; }
+.fatal ul { padding-left: 1.2em; }
+.fatal li { margin: 4px 0; }
 
 .console { padding: 8px; border-top: 1px solid var(--map); }
 .console-hint { opacity: 0.5; margin-bottom: 6px; min-height: 16px; }
