@@ -8,13 +8,17 @@ Der Spieler ist Anfluglotse. Flugzeuge erscheinen über Einflugpunkten (STARs) a
 
 ## §2 Stack & Projektstruktur
 
-Vite `vanilla-ts`, TypeScript strict, Vitest. Canvas 2D für das Radar, DOM für Panels. Struktur:
+Vite `vanilla-ts`, TypeScript strict, Vitest. Canvas 2D für das Radar, DOM für Panels. Bei den devDependencies mindestens `vite@7` und `vitest@3` — ältere Majors ziehen eine esbuild-Kette mit bekannten Advisories nach. Struktur:
 
 ```
 src/
   sim/            # pure Logik, keine Browser-APIs
     constants.ts    # alle Aviation-Konstanten aus dieser SPEC
-    state.ts        # SimState, tick(), seeded RNG (Mulberry32)
+    state.ts        # SimState, tick(), Snapshot-Pipeline; re-exportiert den RNG
+    rng.ts          # seeded RNG (Mulberry32) — eigenes Modul, damit state.ts
+                    #   und pilot.ts einander nicht zyklisch importieren
+    geo.ts          # Vec2, Winkel- und Vektormathematik auf dem NM-Grid (§4)
+    events.ts       # SimEvent, SimEventRecord und die Event-Senke (§3)
     aircraft.ts     # AircraftState, Typ-Profile laden
     physics.ts      # §5
     pilot.ts        # §6
@@ -23,8 +27,11 @@ src/
     separation.ts   # §8
     scenario.ts     # Spawning, Airport laden/validieren
   radar/          # Canvas
+    transform.ts    # NM ↔ Screen, Pan/Zoom — reine Mathematik (§4)
+    theme.ts        # Paletten (§9)
     scope.ts, maps.ts, blips.ts, labels.ts, tools.ts   # §9
   ui/             # DOM
+    parser.ts       # Konsolengrammatik, reines Text → Command[] (§11.3)
     layout.ts, radio.ts, console.ts, cmdpanel.ts, debrief.ts  # §11
   audio/          # §12 (erst M5)
     sfx.ts, tts.ts
@@ -53,9 +60,15 @@ type SimEvent =
   | { kind: 'spawned'; callsign: string; star: string };
 ```
 
+Die Queue führt jedes Event mit seiner Sim-Zeit, weil ein Frame bei Zeitraffer mehrere Ticks rechnet und Funkprotokoll (§11.2) wie Debriefing (§11.5) exakte Zeitstempel brauchen:
+
+```ts
+interface SimEventRecord { at: number; event: SimEvent }   // at = Sim-Zeit in s
+```
+
 ## §4 Koordinaten & Datenmodell
 
-Kartesisches NM-Grid, Ursprung = Schwelle der Piste 14, x = Ost, y = Nord. Screen-Transform (Pan/Zoom) als Matrix nur in `radar/scope.ts`.
+Kartesisches NM-Grid, Ursprung = Schwelle der Piste 14, x = Ost, y = Nord. Screen-Transform (Pan/Zoom) nur in `radar/transform.ts` (reine Mathematik, ohne DOM) und `radar/scope.ts` (Anwendung aufs Canvas); alles andere rechnet ausschließlich in NM.
 
 ```ts
 interface AircraftState {
@@ -94,11 +107,15 @@ type Command =
 6. **Position** integrieren (GS, Track).
 7. **FSM** prüfen (§7), dann **Separation/STCA/MVA** (§8).
 
-Regeln: Zuweisungen unter 10 000 ft mit IAS > 250 kt lehnt der Pilot ab („unable, speed restriction"). Speeds außerhalb `[vMin, vMax]` des Typs ⇒ „unable". MVA-Unterschreitung führt der Pilot aus (das ist ein Lotsenfehler und wird als Event gewertet, einmal je Flieger).
+Regeln: Zuweisungen unter 10 000 ft mit IAS > 250 kt lehnt der Pilot ab („unable, speed restriction"). Speeds außerhalb `[vMin, vMax]` des Typs ⇒ „unable" mit dem Grund „aircraft performance". MVA-Unterschreitung führt der Pilot aus (das ist ein Lotsenfehler und wird als Event gewertet, einmal je Flieger).
+
+Geprüft wird die Ausführbarkeit **zum Ausführungszeitpunkt**, also nach der Reaktionsverzögerung (§6) und gegen den Zustand von dann: ein „unable" ist eine Pilotenreaktion, keine Eingabevalidierung. Enthält eine Transmission mehrere Commands, wird der annehmbare Teil normal gelesen und ausgeführt; je Ablehnungsgrund kommt zusätzlich ein „unable".
+
+„resume normal speed" setzt die Zielgeschwindigkeit auf `clamp(vMin, 250 kt, vMax)` unter 10 000 ft und auf `clamp(vMin, 280 kt, vMax)` darüber — unterhalb FL100 gilt die 250-kt-Beschränkung, darüber eine typische Anflug-Reisegeschwindigkeit statt des strukturellen Maximums.
 
 ## §6 Pilotenmodell
 
-Reaktionsverzögerung je Transmission: Normalverteilung μ=3.5 s, σ=1 s, geclampt auf [2, 6] (seeded RNG, Sim-Zeit). Ablauf: ATC-Transmission (Event sofort) → nach Delay Pilot-Readback (Event) → Commands werden Targets. Hearback-Error (ab M4, Rate konfigurierbar, Default 0.03): genau ein numerischer Wert im Readback und in der Ausführung weicht ab (Höhe ±1000 ft oder Heading ±10°). Eine korrigierende Neuanweisung ist der normale Weg zur Behebung.
+Reaktionsverzögerung je Transmission: Normalverteilung μ=3.5 s, σ=1 s, geclampt auf [2, 6] (seeded RNG, Sim-Zeit). Ablauf: ATC-Transmission (Event sofort) → nach Delay prüft der Pilot die Ausführbarkeit (§5) → Readback der angenommenen Commands bzw. „unable" je Ablehnungsgrund (Events) → angenommene Commands werden Targets. Hearback-Error (ab M4, Rate konfigurierbar, Default 0.03): genau ein numerischer Wert im Readback und in der Ausführung weicht ab (Höhe ±1000 ft oder Heading ±10°). Eine korrigierende Neuanweisung ist der normale Weg zur Behebung.
 
 ## §7 Phasen-FSM & ILS
 
@@ -120,14 +137,16 @@ Reaktionsverzögerung je Transmission: Normalverteilung μ=3.5 s, σ=1 s, geclam
 ## §9 Radar-Rendering
 
 - Ein Canvas, devicePixelRatio-korrekt. Layer: gecachte Karte (Offscreen-Canvas: Range Rings alle 10 NM, Fixes als Dreiecke + Name, MVA-Polygone mit Mindesthöhe, Extended Centerline Piste 14 mit Meilenmarken bis 15 NM) → Trails (6 Punkte, alterend kleiner) → Blips (Quadrat 5 px) → Leader Lines → Labels → Messwerkzeug → STCA-Overlay.
-- **Data Block** (Monospace, 3 Zeilen): `SWR34K` / `074↓ 22` (Höhe in 100 ft mit ↑/↓/leer bei |vs| < 300 ft/min; GS in 10 kt) / `A320 ↦50` (Typ + Target-Altitude in 100 ft). Label per Leader Line am Blip, Offset per Drag verschiebbar (persistiert im State).
+- **Data Block** (Monospace, 3 Zeilen): `SWR34K` / `074↓ 22` (Höhe in 100 ft mit ↑/↓/leer bei |vs| < 300 ft/min; GS in 10 kt) / `A320 ↦50` (Typ + Target-Altitude in 100 ft). Label per Leader Line am Blip, Offset per Drag verschiebbar (persistiert im `AircraftState`). Der Drag schreibt den Offset zusätzlich in den aktuellen Snapshot, damit das Label sofort folgt statt bis zum nächsten Sweep zu warten; Position und Höhe bleiben davon unberührt eingefroren.
 - Pan (Drag auf leerem Grund) & Zoom (Mausrad, um Cursor). Hit-Test für Selektion auf Blip und Label.
 - **Messwerkzeug:** Rechtsklick-Drag von Blip zu Blip zeigt Distanz (NM, eine Nachkommastelle) und Peilung.
 - **Themes** (Palette-Objekt, umschaltbar): `classic` bg `#04140a`, Karte `#0f5132`, Text/Blips `#4ade80`, Akzent `#fbbf24`, Alarm `#ef4444` — `modern` bg `#0b1220`, Karte `#1e293b`, Text `#cbd5e1`, Akzent `#38bdf8`, Alarm `#f87171`.
 
 ## §10 Phraseologie (nur in phraseology.ts)
 
-Zahlen: Headings dreistellig („heading 090"); Höhen < 10 000 ft als „4000 feet", ab 10 000 ft als „flight level 110" (Wert/100). Templates (ATC → Readback = gleiche Elemente in Pilotenwortstellung + Callsign am Ende):
+Zahlen: Headings dreistellig („heading 090"); Höhen < 10 000 ft als „4000 feet", ab 10 000 ft als „flight level 110" (Wert/100).
+
+ATC-Transmissions beginnen mit dem Callsign („SWR34K, turn left heading 270"), Readbacks enden damit. Die Tabelle listet nur den Kommandoteil (ATC → Readback = gleiche Elemente in Pilotenwortstellung + Callsign am Ende):
 
 | Command | ATC | Readback |
 |---|---|---|
@@ -212,6 +231,8 @@ Prozedural via Web Audio, keine Assets: Squelch-Klick (15 ms Noise-Burst, Bandpa
 MVA-Polygone überlappen: es gilt das Maximum aller Polygone, die den Punkt enthalten. Prozeduraler Endlosmodus (M5): Poisson-Ankünfte, Startintervall μ=120 s, alle 10 min × 0.85 (Untergrenze 45 s); Typ/STAR/Callsign seeded zufällig aus Bestandslisten.
 
 ## §14 Meilensteine mit Definition of Done
+
+Getestet wird `sim/` und `phraseology.ts`, ohne Browser-Harness. Die beiden Einheiten, die M0 und M1 zusätzlich abdecken müssen, bleiben deshalb DOM-frei: `radar/transform.ts` (reine Transform-Mathematik) und `ui/parser.ts` (reines Text → `Command[]`). Der Rest von `radar/`, `ui/` und `audio/` bleibt ungetestet.
 
 **M0 — Gerüst.** Vite/TS/Vitest eingerichtet; Koordinatensystem + Transform mit Pan/Zoom; Scope zeigt gecachte Karte des Trainingssektors (Rings, Fixes, MVA, Centerline); Theme umschaltbar. DoD: `npm run dev` zeigt den leeren Sektor; Transform-Unit-Tests (NM↔Screen, Zoom um Cursor) grün.
 
