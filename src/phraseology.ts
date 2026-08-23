@@ -107,6 +107,11 @@ export function pilotUnable(reason: string, callsign: string): string {
   return `unable, ${reason}, ${callsign}`;
 }
 
+/** "going around, SWR34K" — the pilot announces a missed approach (SPEC §7). */
+export function pilotGoingAround(callsign: string): string {
+  return `going around, ${callsign}`;
+}
+
 export function pilotSayAgain(callsign: string): string {
   return `say again, ${callsign}`;
 }

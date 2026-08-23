@@ -3,6 +3,7 @@
  */
 
 import { aircraftProfile, normalSpeed, type AircraftState, type AircraftTypeProfile } from './aircraft';
+import { canHandOff } from './approach';
 import type { Command } from './commands';
 import {
   PILOT_DELAY_MAX_S,
@@ -33,10 +34,18 @@ export function pilotDelaySeconds(state: SimState): number {
  * An altitude below the MVA is *not* refused — that is a controller error.
  */
 export function rejectionReason(
+  state: SimState,
   ac: AircraftState,
   cmd: Command,
   profile: AircraftTypeProfile,
 ): string | null {
+  // SPEC §7: the tower only takes an aircraft that is established and close in.
+  if (cmd.kind === 'handoff' && !canHandOff(state, ac)) return 'not established';
+
+  if (cmd.kind === 'ils' && !state.airport?.runways.some((r) => r.id === cmd.runway)) {
+    return `no runway ${cmd.runway}`;
+  }
+
   if (cmd.kind !== 'speed' || cmd.kt === 'normal') return null;
   if (ac.altitude < SPEED_RESTRICTION_ALT_FT && cmd.kt > SPEED_RESTRICTION_IAS_KT) {
     return 'speed restriction';
@@ -67,11 +76,18 @@ export function applyCommand(
     case 'squawk':
       ac.squawk = cmd.code;
       break;
-    case 'direct':
     case 'ils':
-    case 'hold':
+      // SPEC §7: the aircraft keeps its current targets until it captures.
+      ac.clearedIls = cmd.runway;
+      ac.phase = 'CLEARED_ILS';
+      break;
     case 'handoff':
-      // Navigation and approach clearances arrive with M2–M4 (SPEC §7, §14).
+      // SPEC §7: it flies on and leaves the sector at one mile.
+      ac.phase = 'HANDOFF';
+      break;
+    case 'direct':
+    case 'hold':
+      // Navigation clearances arrive with M4 (SPEC §14).
       break;
   }
 }
@@ -94,7 +110,7 @@ export function processPilotQueue(state: SimState, ac: AircraftState): void {
     const refusals: string[] = [];
 
     for (const cmd of entry.cmds) {
-      const reason = rejectionReason(ac, cmd, profile);
+      const reason = rejectionReason(state, ac, cmd, profile);
       if (reason) {
         if (!refusals.includes(reason)) refusals.push(reason);
       } else {

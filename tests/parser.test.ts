@@ -88,15 +88,54 @@ describe('console parser errors', () => {
   });
 
   it('names the milestone for commands that are not built yet', () => {
-    // DCT, ILS, TWR and SQ are in the SPEC but arrive with later milestones.
-    expect(parseCommandLine('SWR34K ILS14')).toMatchObject({ ok: false, code: 'not-yet' });
-    expect(parseCommandLine('SWR34K TWR')).toMatchObject({ ok: false, code: 'not-yet' });
+    // DCT and SQ are in the SPEC but arrive later.
     expect(parseCommandLine('SWR34K DCT AMIKI')).toMatchObject({ ok: false, code: 'not-yet' });
     expect(parseCommandLine('SWR34K SQ4271')).toMatchObject({ ok: false, code: 'not-yet' });
 
-    const result = parseCommandLine('SWR34K ILS14');
+    const result = parseCommandLine('SWR34K DCT AMIKI');
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.message).toContain('M3');
+    if (!result.ok) expect(result.message).toContain('M4');
+  });
+});
+
+describe('approach clearances (SPEC §7, §11.3)', () => {
+  it('reads the ILS clearance with its runway', () => {
+    expect(parseCommandLine('SWR34K ILS14')).toEqual({
+      ok: true,
+      callsign: 'SWR34K',
+      commands: [{ kind: 'ils', runway: '14' }],
+    });
+    expect(parseCommandLine('SWR34K ils14')).toMatchObject({
+      commands: [{ kind: 'ils', runway: '14' }],
+    });
+    expect(parseCommandLine('SWR34K ILS16L')).toMatchObject({
+      commands: [{ kind: 'ils', runway: '16L' }],
+    });
+  });
+
+  it('reads the handoff', () => {
+    expect(parseCommandLine('SWR34K TWR')).toEqual({
+      ok: true,
+      callsign: 'SWR34K',
+      commands: [{ kind: 'handoff' }],
+    });
+  });
+
+  it('takes an approach clearance alongside other commands', () => {
+    expect(parseCommandLine('SWR34K L110 D30 ILS14')).toMatchObject({
+      commands: [
+        { kind: 'heading', deg: 110, turn: 'L' },
+        { kind: 'altitude', ft: 3000 },
+        { kind: 'ils', runway: '14' },
+      ],
+    });
+  });
+
+  it('says what is missing when the runway is malformed', () => {
+    const bare = parseCommandLine('SWR34K ILS');
+    expect(bare).toMatchObject({ ok: false, code: 'bad-value' });
+    if (!bare.ok) expect(bare.message).toContain('ILS14');
+    expect(parseCommandLine('SWR34K ILS1')).toMatchObject({ ok: false, code: 'bad-value' });
   });
 });
 

@@ -5,12 +5,13 @@
  * ticks per real second, never a longer tick.
  */
 
-import { aircraftProfile, type AircraftState, type WakeCategory } from './aircraft';
+import { aircraftProfile, hasLeftSector, type AircraftState, type WakeCategory } from './aircraft';
 import { SNAPSHOT_INTERVAL_S, TICK_SECONDS, TRAIL_LENGTH } from './constants';
 import { emit, type SimEventRecord } from './events';
 import type { Vec2 } from './geo';
 import type { Phase } from './phases';
 import { updateStarNavigation } from './phases';
+import { updateApproach } from './approach';
 import { CALM, stepAircraft, type WindProfile } from './physics';
 import { processPilotQueue } from './pilot';
 import { spawnAircraft, spawnSpecFor, type Airport, type SpawnEntry } from './scenario';
@@ -46,6 +47,17 @@ export interface RadarSnapshot {
   contacts: RadarContact[];
 }
 
+/** A flight that has left the sector, for the debriefing (SPEC §11.5). */
+export interface CompletedFlight {
+  callsign: string;
+  /** False when it landed without ever being handed to the tower. */
+  handedOff: boolean;
+  /** Sim time it left the sector. */
+  at: number;
+  /** Seconds between check-in and leaving. */
+  timeInSector: number;
+}
+
 export interface SimState {
   /** Sim time in seconds since session start. */
   time: number;
@@ -66,6 +78,8 @@ export interface SimState {
   activeConflicts: string[];
   /** Callsigns that already produced an MVA violation (SPEC §8: once each). */
   mvaReported: string[];
+  /** Flights that have left the sector, in the order they did. */
+  completed: CompletedFlight[];
   nextId: number;
 }
 
@@ -97,6 +111,7 @@ export function createSimState(options: SimStateOptions = {}): SimState {
     stcaPairs: [],
     activeConflicts: [],
     mvaReported: [],
+    completed: [],
     nextId: 1,
   };
 }
@@ -223,9 +238,12 @@ export function tick(state: SimState): void {
   const fixes = state.airport?.fixes ?? NO_FIXES;
 
   for (const ac of state.aircraft) {
-    if (ac.phase === 'DONE') continue;
+    if (hasLeftSector(ac)) continue;
     processPilotQueue(state, ac);
     updateStarNavigation(ac, fixes);
+    updateApproach(state, ac);
+    // The approach can take the aircraft out of the sector mid-tick.
+    if (hasLeftSector(ac)) continue;
     stepAircraft(ac, aircraftProfile(ac.type), state.wind, fixes, TICK_SECONDS);
   }
 

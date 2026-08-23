@@ -22,6 +22,7 @@ import {
   normalizeDeg,
   polarToVec,
   scale,
+  toDegrees,
   vecToPolar,
   type Vec2,
 } from './geo';
@@ -139,6 +140,20 @@ export function groundVector(
   const ground = add(polarToVec(heading, tas), windVector(wind));
   const { bearing, magnitude } = vecToPolar(ground);
   return { track: tas === 0 && wind.kt === 0 ? heading : bearing, gs: magnitude };
+}
+
+/**
+ * The inverse of groundVector: which heading to fly so that the resulting
+ * track is `desiredTrack`. The crosswind component has to be crabbed out
+ * (SPEC §7 — the track follows the approach course, not the heading).
+ * Returns the desired track unchanged when the wind is too strong to hold it.
+ */
+export function headingForTrack(desiredTrack: number, tas: number, wind: WindLayer): number {
+  const air = windVector(wind);
+  const across = polarToVec(desiredTrack + 90, 1);
+  const crosswind = air.x * across.x + air.y * across.y;
+  const ratio = clamp(-crosswind / Math.max(tas, 1), -1, 1);
+  return normalizeDeg(desiredTrack + toDegrees(Math.asin(ratio)));
 }
 
 /** SPEC §5.6: integrate position from ground track and ground speed. */

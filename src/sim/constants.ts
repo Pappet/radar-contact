@@ -67,6 +67,43 @@ export const MVA_BUFFER_FT = 100;
 /** Distance at which a fix counts as passed and the next one becomes active. */
 export const FIX_CAPTURE_RADIUS_NM = 1.0;
 
+// --- ILS approach (SPEC §7) ---
+/** Height of the 3° glidepath per NM from the threshold. */
+export const GLIDEPATH_FT_PER_NM = 318;
+/** Lateral tolerance for capturing the localizer. */
+export const LOC_CAPTURE_LATERAL_NM = 0.5;
+/** Largest intercept angle that still captures. */
+export const LOC_CAPTURE_ANGLE_DEG = 30;
+/** Band below the glidepath in which it is captured, so an aircraft far
+ *  below stays level until the path comes down to it. */
+export const GS_CAPTURE_BAND_FT = 200;
+/** Correction applied per NM of lateral offset while tracking the localizer. */
+export const LOC_CORRECTION_DEG_PER_NM = 12;
+/** Largest correction angle away from the approach course. */
+export const LOC_CORRECTION_MAX_DEG = 20;
+/** Distance at which notEstablished and tooHigh are judged. */
+export const APPROACH_GATE_NM = 6;
+/** How far above the glidepath is too high at the gate. */
+export const GATE_MAX_ABOVE_FT = 300;
+/** From here the pilot is at final approach speed at the latest. */
+export const FINAL_SPEED_NM = 5;
+/** Missed approach levels off here before the controller takes over. */
+export const MISSED_APPROACH_ALT_FT = 4000;
+/** A handoff is only accepted established and inside this distance. */
+export const HANDOFF_MAX_NM = 10;
+/** The aircraft leaves the sector here, landed or handed over. */
+export const TOUCHDOWN_NM = 1;
+/** In-trail spacing on the final is judged from here inwards. */
+export const SPACING_CHECK_NM = 4;
+
+// --- Session and score (SPEC §11.5) ---
+/** Default session length in sim seconds. */
+export const SESSION_LENGTH_S = 30 * 60;
+export const SCORE_HANDOFF = 100;
+export const SCORE_SEPARATION_LOSS = -1000;
+export const SCORE_MVA_VIOLATION = -300;
+export const SCORE_GO_AROUND = -200;
+
 // --- Display conventions (SPEC §9) ---
 /** Below this vertical speed the data block shows no climb/descent arrow. */
 export const VS_ARROW_THRESHOLD_FPM = 300;

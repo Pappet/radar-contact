@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { aircraftProfile } from '../src/sim/aircraft';
+import { angleDiff } from '../src/sim/geo';
 import {
   CALM,
   groundVector,
+  headingForTrack,
   iasToTas,
   integratePosition,
   stepAltitude,
@@ -146,6 +148,47 @@ describe('wind (SPEC §5.5)', () => {
     const ground = groundVector(360, 200, { dir: 270, kt: 20 });
     expect(ground.track).toBeGreaterThan(0);
     expect(ground.track).toBeCloseTo(5.71, 2);
+  });
+});
+
+describe('crabbing into the wind (SPEC §7)', () => {
+  it('flies the heading that makes the track come out right', () => {
+    const wind = { dir: 90, kt: 30 }; // from the east
+    const heading = headingForTrack(360, 200, wind);
+    // The wind pushes west, so the aircraft has to point east of north.
+    expect(heading).toBeGreaterThan(0);
+    expect(heading).toBeLessThan(20);
+
+    // Flying that heading really does produce the wanted track. Compared
+    // through angleDiff, because north comes out as either 0 or 360.
+    const ground = groundVector(heading, 200, wind);
+    expect(Math.abs(angleDiff(360, ground.track))).toBeLessThan(1e-6);
+  });
+
+  it('needs no correction in calm air', () => {
+    expect(headingForTrack(137, 220, { dir: 0, kt: 0 })).toBeCloseTo(137, 9);
+  });
+
+  it('needs no correction for a pure headwind or tailwind', () => {
+    expect(headingForTrack(137, 220, { dir: 137, kt: 40 })).toBeCloseTo(137, 6);
+    expect(headingForTrack(137, 220, { dir: 317, kt: 40 })).toBeCloseTo(137, 6);
+  });
+
+  it('crabs into the wind from either side', () => {
+    const fromLeft = headingForTrack(137, 220, { dir: 47, kt: 30 });
+    const fromRight = headingForTrack(137, 220, { dir: 227, kt: 30 });
+    expect(angleDiff(137, fromLeft)).toBeLessThan(0);
+    expect(angleDiff(137, fromRight)).toBeGreaterThan(0);
+    expect(Math.abs(angleDiff(137, fromLeft))).toBeCloseTo(Math.abs(angleDiff(137, fromRight)), 6);
+  });
+
+  it('holds the approach course exactly with the sector wind', () => {
+    const wind = { dir: 210, kt: 35 };
+    const heading = headingForTrack(137, 260, wind);
+    const ground = groundVector(heading, 260, wind);
+    expect(ground.track).toBeCloseTo(137, 6);
+    // The crab is real, not a rounding artefact.
+    expect(Math.abs(angleDiff(137, heading))).toBeGreaterThan(3);
   });
 });
 

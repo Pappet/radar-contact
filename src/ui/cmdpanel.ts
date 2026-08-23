@@ -3,8 +3,6 @@
  * stepper and speed presets. It builds the same Command objects the console
  * produces — there is only one way into the sim.
  *
- * The ILS and tower buttons of §11.4 arrive with M3, together with the
- * clearances behind them.
  */
 
 import type { Command, TurnDirection } from '../sim/commands';
@@ -15,6 +13,12 @@ import type { Palette } from '../radar/theme';
 export interface PanelView {
   callsign: string;
   type: string;
+  /** Runway of the active ILS, for the approach button (SPEC §11.4). */
+  runway: string;
+  /** True once the tower may take the aircraft (SPEC §7). */
+  canHandOff: boolean;
+  /** True once the ILS clearance has been given. */
+  clearedIls: boolean;
   /** Current values, as the radar shows them. */
   altitude: number;
   heading: number;
@@ -66,6 +70,10 @@ export function createCommandPanel(
             <button class="btn" data-ref="alt-up">+</button>
           </div>
           <div class="panel-row panel-speeds" data-ref="speeds"></div>
+          <div class="panel-row">
+            <button class="btn" data-ref="ils"></button>
+            <button class="btn" data-ref="twr" title="Contact tower">TWR</button>
+          </div>
         </div>
       </div>
     </div>
@@ -84,6 +92,8 @@ export function createCommandPanel(
   const rose = pick<HTMLCanvasElement>('rose');
   const altInput = pick<HTMLInputElement>('alt-input');
   const speedsRow = pick('speeds');
+  const ilsButton = pick<HTMLButtonElement>('ils');
+  const towerButton = pick<HTMLButtonElement>('twr');
 
   let view: PanelView | null = null;
   let palette: Palette | null = null;
@@ -215,6 +225,11 @@ export function createCommandPanel(
   normalButton.addEventListener('click', () => send({ kind: 'speed', kt: 'normal' }));
   speedsRow.appendChild(normalButton);
 
+  ilsButton.addEventListener('click', () => {
+    if (view) send({ kind: 'ils', runway: view.runway });
+  });
+  towerButton.addEventListener('click', () => send({ kind: 'handoff' }));
+
   function render(): void {
     if (!view) {
       body.hidden = true;
@@ -239,6 +254,11 @@ export function createCommandPanel(
         label === 'SN' ? false : Math.round(view.targetSpeed) === Number(label);
       button.classList.toggle('active', active);
     }
+
+    ilsButton.textContent = `ILS ${view.runway}`;
+    ilsButton.classList.toggle('active', view.clearedIls);
+    // The tower only takes an established aircraft inside ten miles (SPEC §7).
+    towerButton.disabled = !view.canHandOff;
 
     drawRose();
   }

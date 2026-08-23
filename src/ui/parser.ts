@@ -39,8 +39,8 @@ export const COMMAND_REFERENCE: CommandDoc[] = [
   { syntax: 'C<alt>', sample: 'C120', meaning: 'Climb to 12 000 ft' },
   { syntax: 'S<kt>', sample: 'S180', meaning: 'Speed 180 kt' },
   { syntax: 'SN', sample: 'SN', meaning: 'Resume normal speed' },
-  { syntax: 'ILS<rwy>', sample: 'ILS14', meaning: 'Cleared ILS approach runway 14', comingIn: 'M3' },
-  { syntax: 'TWR', sample: 'TWR', meaning: 'Contact tower — hand the aircraft off', comingIn: 'M3' },
+  { syntax: 'ILS<rwy>', sample: 'ILS14', meaning: 'Cleared ILS approach runway 14' },
+  { syntax: 'TWR', sample: 'TWR', meaning: 'Contact tower — hand the aircraft off' },
   { syntax: 'DCT <fix>', sample: 'DCT AMIKI', meaning: 'Proceed direct to a fix', comingIn: 'M4' },
   { syntax: 'SQ<code>', sample: 'SQ4271', meaning: 'Squawk 4271', comingIn: 'later' },
 ];
@@ -61,6 +61,7 @@ export type ParseResult =
 const HEADING = /^([LRH])(\d{1,3})$/;
 const ALTITUDE = /^([DC])(\d{1,3})$/;
 const SPEED = /^S(\d{2,3})$/;
+const ILS = /^ILS(\d{2}[LRC]?)$/;
 
 /** Hundreds of feet, as flown in the console: D50 → 5000 ft. */
 const MIN_ALTITUDE_HUNDREDS = 1;
@@ -76,6 +77,9 @@ function turnOf(letter: string): TurnDirection {
 
 function parseToken(token: string): Command | { error: ParseResult } {
   if (token === 'SN') return { kind: 'speed', kt: 'normal' };
+
+  const approach = parseApproachToken(token);
+  if (approach) return approach;
 
   const heading = HEADING.exec(token);
   if (heading) {
@@ -117,6 +121,21 @@ function parseToken(token: string): Command | { error: ParseResult } {
   }
 
   return { error: { ok: false, code: 'unknown-token', message: `Unknown command: ${token}` } };
+}
+
+function parseApproachToken(token: string): Command | { error: ParseResult } | null {
+  if (token === 'TWR') return { kind: 'handoff' };
+  if (!token.startsWith('ILS')) return null;
+
+  const ils = ILS.exec(token);
+  if (ils) return { kind: 'ils', runway: ils[1] as string };
+  return {
+    error: {
+      ok: false,
+      code: 'bad-value',
+      message: `${token}: an ILS clearance needs a runway, e.g. ILS14`,
+    },
+  };
 }
 
 export function parseCommandLine(input: string): ParseResult {
