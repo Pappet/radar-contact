@@ -224,3 +224,22 @@ body {
   line-height: 1.35;
   width: max-content;
 }
+
+/* --- Debriefing (SPEC §11.5) --- */
+
+.debrief-dialog { width: min(680px, 100%); }
+.debrief-score {
+  font-size: 22px;
+  letter-spacing: 1px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.debrief-score.is-negative { color: var(--alarm); }
+.debrief-dialog .help-table { margin-bottom: 14px; }
+.debrief-events { max-height: 240px; overflow-y: auto; }
+.debrief-line { display: flex; gap: 8px; padding: 2px 0; line-height: 1.4; }
+.debrief-line.is-good { color: var(--text); }
+.debrief-line.is-bad { color: var(--alarm); }
+
+.btn:disabled { opacity: 0.35; cursor: default; }
+.btn:disabled:hover { border-color: var(--map); }

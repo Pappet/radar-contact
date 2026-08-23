@@ -84,6 +84,13 @@ export interface AircraftState {
   route: string[];
   /** STAR the aircraft arrived on, used for the initial call (SPEC §10) */
   star?: string;
+  /** The six mile gate judges notEstablished and tooHigh once (SPEC §7) */
+  gateChecked?: boolean;
+}
+
+/** True once the aircraft has left the sector — landed or handed over (SPEC §7). */
+export function hasLeftSector(ac: AircraftState): boolean {
+  return ac.phase === 'DONE';
 }
 
 /**

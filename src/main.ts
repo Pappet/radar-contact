@@ -4,9 +4,10 @@
  */
 
 import './style.css';
-import { TICK_SECONDS } from './sim/constants';
+import { SESSION_LENGTH_S, TICK_SECONDS } from './sim/constants';
+import { canHandOff } from './sim/approach';
 import { dispatch, type Command } from './sim/commands';
-import { CALM } from './sim/physics';
+
 import { AirportValidationError, loadTrainingWest, type Airport } from './sim/scenario';
 import { createSimState, drainEvents, emit, setLabelOffset, tick } from './sim/state';
 import { createScope } from './radar/scope';
@@ -16,6 +17,9 @@ import { createRadioLog } from './ui/radio';
 import { createConsole } from './ui/console';
 import { createCommandPanel, type PanelView } from './ui/cmdpanel';
 import { createHelpOverlay } from './ui/help';
+import { createDebrief } from './ui/debrief';
+import { summarize } from './score';
+import type { SimEventRecord } from './sim/events';
 import { pilotSayAgain } from './phraseology';
 
 const MAX_TICKS_PER_FRAME = 60;
@@ -24,6 +28,13 @@ function seedFromLocation(): number {
   const fromUrl = new URLSearchParams(window.location.search).get('seed');
   const parsed = fromUrl ? Number(fromUrl) : Number.NaN;
   return Number.isFinite(parsed) ? parsed | 0 : (Date.now() & 0x7fffffff) || 1;
+}
+
+/** SPEC §11.5 calls 30 minutes the default, so ?minutes= may shorten a session. */
+function sessionLengthFromLocation(): number {
+  const fromUrl = new URLSearchParams(window.location.search).get('minutes');
+  const minutes = fromUrl ? Number(fromUrl) : Number.NaN;
+  return Number.isFinite(minutes) && minutes > 0 ? Math.round(minutes * 60) : SESSION_LENGTH_S;
 }
 
 function applyTheme(theme: ThemeName): void {
@@ -75,9 +86,12 @@ function main(): void {
   const state = createSimState({
     seed: seedFromLocation(),
     airport,
-    // Wind stays calm until M3 (SPEC §14).
-    wind: CALM,
+    // SPEC §14: from M3 the sector flies with its own wind profile.
+    wind: airport.windProfile,
   });
+
+  /** Everything that happened, for the debriefing (SPEC §11.5). */
+  const sessionLog: SimEventRecord[] = [];
 
   const transmit = (callsign: string, commands: Command[]): void => {
     const result = dispatch(state, callsign, commands);
@@ -99,6 +113,7 @@ function main(): void {
   });
 
   const help = createHelpOverlay(mount);
+  const debrief = createDebrief(mount);
 
   const commandConsole = createConsole(layout.consolePane, {
     callsigns: () => state.aircraft.filter((ac) => ac.onFrequency).map((ac) => ac.callsign),
@@ -135,11 +150,15 @@ function main(): void {
       ias: ac.ias,
       targetAltitude: ac.target.altitude,
       targetSpeed: ac.target.speed,
+      runway: airport.runways[0]?.id ?? '14',
+      canHandOff: canHandOff(state, ac),
+      clearedIls: ac.clearedIls !== undefined,
       ...(ac.target.heading ? { targetHeading: ac.target.heading.deg } : {}),
     };
     panel.update(view);
   }
 
+  const sessionLength = sessionLengthFromLocation();
   let theme: ThemeName = 'classic';
   let timeScale: TimeScale = 1;
   let paused = false;
@@ -197,17 +216,24 @@ function main(): void {
     const elapsed = Math.min((now - lastFrame) / 1000, 0.25);
     lastFrame = now;
 
-    if (!paused) {
+    const running = !paused && state.time < sessionLength;
+    if (running) {
       accumulator += elapsed * timeScale;
       let ticks = 0;
-      while (accumulator >= TICK_SECONDS && ticks < MAX_TICKS_PER_FRAME) {
+      while (
+        accumulator >= TICK_SECONDS &&
+        ticks < MAX_TICKS_PER_FRAME &&
+        state.time < sessionLength
+      ) {
         tick(state);
         accumulator -= TICK_SECONDS;
         ticks += 1;
       }
     }
 
-    for (const record of drainEvents(state)) {
+    const drained = drainEvents(state);
+    sessionLog.push(...drained);
+    for (const record of drained) {
       const event = record.event;
       switch (event.kind) {
         case 'transmission':
@@ -219,6 +245,9 @@ function main(): void {
         case 'mvaViolation':
           radio.note(record.at, `MVA — ${event.callsign} below minimum vectoring altitude`);
           break;
+        case 'goAround':
+          radio.note(record.at, `GO-AROUND — ${event.callsign} (${event.reason})`);
+          break;
         default:
           // STCA blinks on the scope; spawns announce themselves on the radio.
           break;
@@ -228,6 +257,13 @@ function main(): void {
     layout.clock.textContent = formatSimClock(state.time);
     scope.render(state.snapshot);
     updatePanel();
+
+    // SPEC §11.5: at the bell the simulation stops and the debriefing appears.
+    if (state.time >= sessionLength && !debrief.isVisible()) {
+      const airborne = state.aircraft.filter((ac) => ac.phase !== 'DONE').length;
+      debrief.show(summarize(sessionLog, state.completed, airborne), sessionLog);
+    }
+
     requestAnimationFrame(frame);
   }
 
