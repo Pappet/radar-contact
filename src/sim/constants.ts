@@ -45,6 +45,28 @@ export const PILOT_DELAY_SIGMA_S = 1.0;
 export const PILOT_DELAY_MIN_S = 2;
 export const PILOT_DELAY_MAX_S = 6;
 
+// --- Separation (SPEC §8) ---
+/** Horizontal minimum between two aircraft. */
+export const SEPARATION_HORIZONTAL_NM = 3.0;
+/** Vertical minimum; a pair is only in conflict when both are breached. */
+export const SEPARATION_VERTICAL_FT = 1000;
+/** Pairs are only watched below this altitude. */
+export const SEPARATION_CEILING_FT = 15000;
+
+// --- Short term conflict alert (SPEC §8) ---
+/** How far ahead the linear extrapolation looks. */
+export const STCA_LOOKAHEAD_S = 120;
+/** Step width of that extrapolation. */
+export const STCA_STEP_S = 4;
+
+// --- Minimum vectoring altitude (SPEC §8) ---
+/** Tolerance below the sector minimum before it counts as a violation. */
+export const MVA_BUFFER_FT = 100;
+
+// --- Navigation (SPEC §7) ---
+/** Distance at which a fix counts as passed and the next one becomes active. */
+export const FIX_CAPTURE_RADIUS_NM = 1.0;
+
 // --- Display conventions (SPEC §9) ---
 /** Below this vertical speed the data block shows no climb/descent arrow. */
 export const VS_ARROW_THRESHOLD_FPM = 300;

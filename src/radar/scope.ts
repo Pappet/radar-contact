@@ -175,13 +175,19 @@ export function createScope(
       for (const contact of snapshot.contacts) {
         drawTrail(ctx, contact, transform, viewport, palette);
       }
+      // SPEC §9: the STCA blink runs at 60 fps over the frozen picture.
+      const blinkOn = Math.floor(performance.now() / 500) % 2 === 0;
+
       for (const contact of snapshot.contacts) {
-        const options = { selected: contact.id === selectedId, alarm: false };
+        const options = {
+          selected: contact.id === selectedId,
+          alarm: contact.alert === 'conflict' || (contact.alert === 'stca' && blinkOn),
+        };
         drawBlip(ctx, contact, transform, viewport, palette, options);
         drawLabel(ctx, contact, blipScreenPos(transform, viewport, contact), palette, options);
       }
 
-      // STCA overlay (M2) and the measuring tool (M4) draw on top of this.
+      // The measuring tool (M4) draws on top of this.
     },
     setTheme(next) {
       theme = next;

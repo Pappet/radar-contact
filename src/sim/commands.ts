@@ -4,7 +4,7 @@
  */
 
 import type { SimState } from './state';
-import { findAircraft } from './state';
+import { findAircraft, towerFrequency } from './state';
 import { emit } from './events';
 import { pilotDelaySeconds } from './pilot';
 import { atcTransmission } from '../phraseology';
@@ -45,7 +45,7 @@ export function dispatch(state: SimState, callsign: string, commands: Command[])
       callsign: ac.callsign,
       altitude: ac.altitude,
       ias: ac.ias,
-      towerFreq: state.towerFreq,
+      towerFreq: towerFrequency(state),
     }),
   });
 
