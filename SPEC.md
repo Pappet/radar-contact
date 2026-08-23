@@ -31,7 +31,8 @@ src/
     theme.ts        # Paletten (§9)
     scope.ts, maps.ts, blips.ts, labels.ts, tools.ts   # §9
   ui/             # DOM
-    parser.ts       # Konsolengrammatik, reines Text → Command[] (§11.3)
+    parser.ts       # Konsolengrammatik plus Kommando-Referenz (§11.3, §11.6)
+    help.ts         # Hilfe-Overlay (§11.6)
     layout.ts, radio.ts, console.ts, cmdpanel.ts, debrief.ts  # §11
   audio/          # §12 (erst M5)
     sfx.ts, tts.ts
@@ -183,6 +184,10 @@ Mehrere Commands in einer Transmission werden mit Kommas gereiht („turn left h
 **§11.4 Klick-Panel:** erscheint bei Selektion; Heading-Rose (Klick = auto-turn, Alt-Klick = Gegenrichtung), Höhen-Stepper (±1000 ft) mit Direktwahl, Speed-Presets (160/180/200/220/SN), Buttons ILS 14 und TWR. Erzeugt dieselben Command-Objekte wie die Konsole.
 
 **§11.5 Score & Debriefing:** +100 je `handoffComplete`; −1000 je `separationLoss`; −300 je `mvaViolation`; −200 je `goAround` mit reason ≠ `spacing` durch Vordermann-Fehler des gleichen Spielers (v1: alle Go-Arounds zählen −200); Landung ohne Handoff: +0. Debriefing-Screen am Sessionende: Score, Zähler je Kategorie, Ø-Zeit im Sektor, Ereignisliste mit Sim-Zeitstempeln.
+
+**§11.6 Hilfe:** Ein Overlay zeigt, was der Spieler sonst nirgends sieht: die Kommandos mit Bedeutung, die Maus-Bedienung von Radar und Klick-Panel, die Tastenkürzel der Konsole und die Lesart des Datenblocks. Zu öffnen über den `?`-Button in der Kopfzeile, über F1 oder über `?` bzw. `HELP` in der Konsole; Escape, der Button oder ein Klick auf den Hintergrund schließen es.
+
+Die Kommandoliste wird aus derselben Tabelle erzeugt, die der Parser benutzt (`COMMAND_REFERENCE` in `ui/parser.ts`) — Hilfe und Grammatik können damit nicht auseinanderlaufen. Kommandos, die die SPEC kennt, der aktuelle Meilenstein aber noch nicht gebaut hat, stehen gedimmt mit dem Meilenstein, der sie bringt; der Parser lehnt sie mit genau diesem Text ab statt mit „unknown command". Unter der Eingabezeile steht dauerhaft ein kurzer Hinweis, der nach einer Statusmeldung von selbst zurückkehrt.
 
 ## §12 Audio (M5)
 

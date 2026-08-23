@@ -15,6 +15,7 @@ import { buildLayout, formatSimClock, TIME_SCALES, type TimeScale } from './ui/l
 import { createRadioLog } from './ui/radio';
 import { createConsole } from './ui/console';
 import { createCommandPanel, type PanelView } from './ui/cmdpanel';
+import { createHelpOverlay } from './ui/help';
 import { pilotSayAgain } from './phraseology';
 
 const MAX_TICKS_PER_FRAME = 60;
@@ -97,8 +98,11 @@ function main(): void {
     onLabelDrag: (id, offset) => setLabelOffset(state, id, offset),
   });
 
+  const help = createHelpOverlay(mount);
+
   const commandConsole = createConsole(layout.consolePane, {
     callsigns: () => state.aircraft.filter((ac) => ac.onFrequency).map((ac) => ac.callsign),
+    onHelp: () => help.open(),
     onSubmit: (result) => {
       if (!result.ok) {
         // SPEC §11.3: anything the parser cannot read gets a "say again".
@@ -172,6 +176,19 @@ function main(): void {
     layout.themeButton.textContent = `Theme: ${theme}`;
   });
   syncRateButtons();
+
+  layout.helpButton.addEventListener('click', () => help.toggle());
+  window.addEventListener('keydown', (ev) => {
+    if (ev.key === 'F1') {
+      ev.preventDefault();
+      help.toggle();
+      return;
+    }
+    if (ev.key === 'Escape' && help.isOpen()) {
+      ev.preventDefault();
+      help.close();
+    }
+  });
 
   let lastFrame = performance.now();
   let accumulator = 0;

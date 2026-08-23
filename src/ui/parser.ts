@@ -8,7 +8,51 @@
 
 import type { Command, TurnDirection } from '../sim/commands';
 
-export type ParseErrorCode = 'empty' | 'no-commands' | 'unknown-token' | 'bad-value';
+export type ParseErrorCode =
+  | 'empty'
+  | 'no-commands'
+  | 'unknown-token'
+  | 'bad-value'
+  /** A command the SPEC defines but the current milestone has not built yet. */
+  | 'not-yet';
+
+/**
+ * The command reference, right next to the grammar that implements it, so the
+ * in-game help (SPEC §11.6) cannot drift from what the parser accepts.
+ * `sample` is checked against the parser by the tests.
+ */
+export interface CommandDoc {
+  /** How it is written, e.g. "L<hdg>". */
+  syntax: string;
+  /** A concrete input that must behave as documented. */
+  sample: string;
+  meaning: string;
+  /** Set when the command is not built yet; names the milestone if known. */
+  comingIn?: string | undefined;
+}
+
+export const COMMAND_REFERENCE: CommandDoc[] = [
+  { syntax: 'L<hdg>', sample: 'L270', meaning: 'Turn left onto heading 270' },
+  { syntax: 'R<hdg>', sample: 'R090', meaning: 'Turn right onto heading 090' },
+  { syntax: 'H<hdg>', sample: 'H360', meaning: 'Fly heading 360, turning the short way' },
+  { syntax: 'D<alt>', sample: 'D50', meaning: 'Descend to 5000 ft — altitude in hundreds' },
+  { syntax: 'C<alt>', sample: 'C120', meaning: 'Climb to 12 000 ft' },
+  { syntax: 'S<kt>', sample: 'S180', meaning: 'Speed 180 kt' },
+  { syntax: 'SN', sample: 'SN', meaning: 'Resume normal speed' },
+  { syntax: 'ILS<rwy>', sample: 'ILS14', meaning: 'Cleared ILS approach runway 14', comingIn: 'M3' },
+  { syntax: 'TWR', sample: 'TWR', meaning: 'Contact tower — hand the aircraft off', comingIn: 'M3' },
+  { syntax: 'DCT <fix>', sample: 'DCT AMIKI', meaning: 'Proceed direct to a fix', comingIn: 'M4' },
+  { syntax: 'SQ<code>', sample: 'SQ4271', meaning: 'Squawk 4271', comingIn: 'later' },
+];
+
+/** Commands that are written down but not built yet, matched on the token. */
+const PENDING: { pattern: RegExp; doc: CommandDoc }[] = COMMAND_REFERENCE.filter(
+  (doc) => doc.comingIn !== undefined,
+).map((doc) => ({
+  // The leading letters of the syntax identify the token.
+  pattern: new RegExp(`^${(doc.syntax.match(/^[A-Z]+/) ?? [''])[0]}(\\d.*)?$`),
+  doc,
+}));
 
 export type ParseResult =
   | { ok: true; callsign: string; commands: Command[] }
@@ -58,6 +102,18 @@ function parseToken(token: string): Command | { error: ParseResult } {
       return { error: { ok: false, code: 'bad-value', message: `Speed out of range: ${token}` } };
     }
     return { kind: 'speed', kt };
+  }
+
+  const pending = PENDING.find((entry) => entry.pattern.test(token));
+  if (pending) {
+    const when = pending.doc.comingIn === 'later' ? 'is not built yet' : `arrives with ${pending.doc.comingIn}`;
+    return {
+      error: {
+        ok: false,
+        code: 'not-yet',
+        message: `${pending.doc.syntax} (${pending.doc.meaning}) ${when}`,
+      },
+    };
   }
 
   return { error: { ok: false, code: 'unknown-token', message: `Unknown command: ${token}` } };
