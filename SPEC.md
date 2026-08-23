@@ -67,6 +67,8 @@ Die Queue führt jedes Event mit seiner Sim-Zeit, weil ein Frame bei Zeitraffer 
 interface SimEventRecord { at: number; event: SimEvent }   // at = Sim-Zeit in s
 ```
 
+Der `SimState` trägt den geladenen Airport als Ganzes (Fixes, STARs, MVA-Sektoren, Tower-Frequenz, offener Spawn-Schedule), damit alle Prüfungen aus derselben Quelle lesen. Das Windprofil bleibt bewusst daneben und still, bis M3 es einschaltet (§14).
+
 ## §4 Koordinaten & Datenmodell
 
 Kartesisches NM-Grid, Ursprung = Schwelle der Piste 14, x = Ost, y = Nord. Screen-Transform (Pan/Zoom) nur in `radar/transform.ts` (reine Mathematik, ohne DOM) und `radar/scope.ts` (Anwendung aufs Canvas); alles andere rechnet ausschließlich in NM.
@@ -85,6 +87,9 @@ interface AircraftState {
   clearedIls?: string;
   pilot: { queue: { cmds: Command[]; executeAt: number }[]; hearbackTaken?: Command[] };
   spawnedAt: number; labelOffset: Vec2;
+  route: string[];                                 // noch zu fliegende Fixes der STAR (§7)
+  star?: string;                                   // Name der STAR, für die Erstanmeldung (§10)
+  trail: Vec2[];                                   // letzte Snapshot-Positionen (§3)
 }
 
 type Command =
@@ -122,17 +127,17 @@ Reaktionsverzögerung je Transmission: Normalverteilung μ=3.5 s, σ=1 s, geclam
 
 `Phase = 'STAR' | 'VECTOR' | 'CLEARED_ILS' | 'LOC' | 'GS' | 'HANDOFF' | 'GOAROUND' | 'DONE'`
 
-- **STAR:** fliegt die Fixfolge der zugewiesenen STAR mit `entryAlt`. Jeder Heading-/Direct-Command wechselt zu VECTOR.
+- **STAR:** fliegt die Fixfolge der zugewiesenen STAR mit `entryAlt`. Ein Fix gilt ab 1.0 NM Abstand als überflogen (`FIX_CAPTURE_RADIUS_NM`), dann wird auf den nächsten geschaltet; nach dem letzten Fix hält der Flieger sein Heading, bis der Lotse übernimmt. Jeder Heading-/Direct-Command wechselt zu VECTOR.
 - **CLEARED_ILS** (nach `ils`-Command): fliegt aktuelle Targets weiter. **LOC-Capture**, wenn Querabstand zur verlängerten Anfluggrundlinie ≤ 0.5 NM **und** Schnittwinkel ≤ 30°. Danach folgt der Track dem Anflugkurs (137°).
 - **GS-Capture** nur von unten: wenn `altitude ≤ 318 × dist_NM` (3°-Gleitpfad, Schwelle = 0 ft). Danach VS so, dass der Gleitpfad gehalten wird; der Pilot reduziert selbstständig auf `vApp`, spätestens ab 5 NM.
-- **Go-Around** (Event mit reason): bei 6 NM Final nicht LOC-established (`notEstablished`); beim GS-Capture-Punkt > 300 ft über Gleitpfad (`tooHigh`); Abstand zum Vordermann auf dem Final unterschreitet die Wake-Matrix bei ≤ 4 NM (`spacing`). Missed Approach: geradeaus steigen auf 4000 ft, dann Phase VECTOR (Lotse übernimmt wieder).
+- **Go-Around** (Event mit reason): beim Passieren von 6 NM Final wird einmalig beides geprüft — nicht LOC-established ⇒ `notEstablished`, und mehr als 300 ft über dem Gleitpfad (`altitude > 318 × dist_NM + 300`) ⇒ `tooHigh`. Unabhängig davon: unterschreitet der Abstand zum Vordermann auf dem Final die Wake-Matrix bei ≤ 4 NM ⇒ `spacing`. Missed Approach: geradeaus steigen auf 4000 ft, dann Phase VECTOR (Lotse übernimmt wieder).
 - **HANDOFF** (`handoff`-Command, erlaubt ab LOC/GS und ≤ 10 NM Final): „contact tower", Flieger fliegt weiter, despawnt bei 1 NM als erfolgreich (`handoffComplete`, Phase DONE). Handoff vergessen ⇒ Flieger landet trotzdem, zählt aber nicht als sauber übergeben (Score §11.4).
 
 ## §8 Separation, Wake, STCA, MVA
 
 - **Verstoß** (jede Sim-Sekunde, Live-Daten, paarweise, nur Flieger < 15 000 ft und Phase ≠ DONE): horizontal < 3.0 NM **und** vertikal < 1000 ft ⇒ `separationLoss` (pro Paar entprellt: erneut erst nach Wiederherstellung).
 - **Wake in-trail auf dem Final** (beide LOC/GS, gleiche Piste): Mindestabstand hinter H: H 4 / M 5 / L 6 NM; L hinter M: 5 NM; sonst 3 NM.
-- **STCA:** alle 4 s, lineare Extrapolation aller Paare 120 s voraus in 4-s-Schritten; wird irgendwo < 3 NM und < 1000 ft prognostiziert ⇒ `stca`-Event, beide Labels blinken. STCA ist Warnung, kein Verstoß.
+- **STCA:** alle 4 s, lineare Extrapolation aller Paare 120 s voraus in 4-s-Schritten, beginnend bei t = 0 (ein bereits bestehender Konflikt ist auch eine Warnung); wird irgendwo < 3 NM und < 1000 ft prognostiziert ⇒ `stca`-Event, beide Labels blinken. STCA ist Warnung, kein Verstoß.
 - **MVA:** Punkt-in-Polygon gegen `mva[]` des Airports; `altitude < minAlt − 100` ⇒ `mvaViolation` (einmal je Flieger). Flieger auf LOC/GS sind ausgenommen.
 
 ## §9 Radar-Rendering
@@ -167,7 +172,7 @@ Mehrere Commands in einer Transmission werden mit Kommas gereiht („turn left h
 
 **§11.1 Layout:** CSS Grid. Links Radar (dominant, min. 70 % Breite), rechts Spalte: Funkprotokoll (flex, scrollend) → Befehlspanel des selektierten Fliegers → Konsole (unten, immer fokussierbar). Kopfzeile: Sim-Uhr, Zeitraffer/Pause, Theme-Toggle, Seed.
 
-**§11.2 Funkprotokoll:** append-only, Auto-Scroll (aussetzend, wenn der Nutzer hochgescrollt hat), ATC und Piloten farblich unterschieden, Timestamp in Sim-Zeit.
+**§11.2 Funkprotokoll:** append-only, Auto-Scroll (aussetzend, wenn der Nutzer hochgescrollt hat), ATC und Piloten farblich unterschieden, Timestamp in Sim-Zeit. Ereignisse ohne Funkspruch, die der Lotse sonst übersähe — Separationsverlust und MVA-Unterschreitung — laufen als dritte, alarmfarbene Kategorie mit; STCA bleibt rein visuell auf dem Radar.
 
 **§11.3 Konsole:** Grammatik `CALLSIGN CMD [CMD ...]`, case-insensitiv. Tab vervollständigt Callsigns, ↑/↓ History. Parser-Fehler ⇒ Pilot-Event „say again". Kommandos:
 
@@ -183,8 +188,11 @@ Mehrere Commands in einer Transmission werden mit Kommas gereiht („turn left h
 
 **§11.4 Klick-Panel:** erscheint bei Selektion; Heading-Rose (Klick = auto-turn, Alt-Klick = Gegenrichtung), Höhen-Stepper (±1000 ft) mit Direktwahl, Speed-Presets (160/180/200/220/SN), Buttons ILS 14 und TWR. Erzeugt dieselben Command-Objekte wie die Konsole.
 
+Der Höhen-Stepper rechnet auf der zuletzt geklickten Freigabe weiter, nicht auf der vom Piloten schon quittierten: zwei Klicks innerhalb der Reaktionsverzögerung (§6) ergeben 2000 ft, nicht zweimal 1000 ft. Solange die Freigabe unquittiert ist, steht sie in Akzentfarbe im Feld.
+
 **§11.5 Score & Debriefing:** +100 je `handoffComplete`; −1000 je `separationLoss`; −300 je `mvaViolation`; −200 je `goAround` mit reason ≠ `spacing` durch Vordermann-Fehler des gleichen Spielers (v1: alle Go-Arounds zählen −200); Landung ohne Handoff: +0. Debriefing-Screen am Sessionende: Score, Zähler je Kategorie, Ø-Zeit im Sektor, Ereignisliste mit Sim-Zeitstempeln.
 
+Sessionende (Default 30 min Sim-Zeit) ist ein harter Schnitt: die Simulation hält an, das Debriefing legt sich über das Radar. Noch fliegender Verkehr zählt weder als übergeben noch als verloren, und die Ø-Zeit im Sektor rechnet nur über abgeschlossene Flüge.
 **§11.6 Hilfe:** Ein Overlay zeigt, was der Spieler sonst nirgends sieht: die Kommandos mit Bedeutung, die Maus-Bedienung von Radar und Klick-Panel, die Tastenkürzel der Konsole und die Lesart des Datenblocks. Zu öffnen über den `?`-Button in der Kopfzeile, über F1 oder über `?` bzw. `HELP` in der Konsole; Escape, der Button oder ein Klick auf den Hintergrund schließen es.
 
 Die Kommandoliste wird aus derselben Tabelle erzeugt, die der Parser benutzt (`COMMAND_REFERENCE` in `ui/parser.ts`) — Hilfe und Grammatik können damit nicht auseinanderlaufen. Kommandos, die die SPEC kennt, der aktuelle Meilenstein aber noch nicht gebaut hat, stehen gedimmt mit dem Meilenstein, der sie bringt; der Parser lehnt sie mit genau diesem Text ab statt mit „unknown command". Unter der Eingabezeile steht dauerhaft ein kurzer Hinweis, der nach einer Statusmeldung von selbst zurückkehrt.
@@ -245,7 +253,7 @@ Getestet wird `sim/` und `phraseology.ts`, ohne Browser-Harness. Die beiden Einh
 
 **M2 — Verkehr.** Szenario-/Airport-Laden mit Validierung, Spawn-Schedule, STAR-Phase, Selektion + Klick-Panel, Separation §8 (ohne Wake), STCA, MVA. DoD: training-west.json läuft; provozierter Konflikt löst STCA und danach separationLoss aus; Tests: Separation-Paarlogik, Punkt-in-Polygon, STCA-Extrapolation.
 
-**M3 — Spielbar (MVP).** ILS-FSM §7 komplett inkl. Go-Around und Handoff; Wind aktiv; Score + Debriefing; Sessionende (Default 30 min Sim-Zeit). DoD: eine volle Session ist von Spawn bis Debriefing spielbar; Tests: LOC-Capture aus beiden Seiten + Ablehnung bei > 30°, GS-Capture nur von unten, Go-Around-Trigger.
+**M3 — Spielbar (MVP).** ILS-FSM §7 komplett inkl. Go-Around und Handoff; Wind aktiv; Score + Debriefing; Sessionende (Default 30 min Sim-Zeit). Der `spacing`-Go-Around entsteht hier mit dem einfachen 3-NM-Mindestabstand; M4 ersetzt nur die Distanz durch die Wake-Matrix. DoD: eine volle Session ist von Spawn bis Debriefing spielbar; Tests: LOC-Capture aus beiden Seiten + Ablehnung bei > 30°, GS-Capture nur von unten, Go-Around-Trigger.
 
 **M4 — Handwerk.** Wake-Staffelung auf dem Final, Hearback-Errors, `HOLD` (published Holding am Fix: Racetrack, 1-min-Legs, rechts), Messwerkzeug, `DCT`, Feinschliff Labels/Panels. DoD: Tests Wake-Matrix und Hearback-Abweichung; Holding hält Flieger stabil am Fix.
 
