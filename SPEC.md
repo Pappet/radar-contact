@@ -129,7 +129,7 @@ Reaktionsverzögerung je Transmission: Normalverteilung μ=3.5 s, σ=1 s, geclam
 - **STAR:** fliegt die Fixfolge der zugewiesenen STAR mit `entryAlt`. Ein Fix gilt ab 1.0 NM Abstand als überflogen (`FIX_CAPTURE_RADIUS_NM`), dann wird auf den nächsten geschaltet; nach dem letzten Fix hält der Flieger sein Heading, bis der Lotse übernimmt. Jeder Heading-/Direct-Command wechselt zu VECTOR.
 - **CLEARED_ILS** (nach `ils`-Command): fliegt aktuelle Targets weiter. **LOC-Capture**, wenn Querabstand zur verlängerten Anfluggrundlinie ≤ 0.5 NM **und** Schnittwinkel ≤ 30°. Danach folgt der Track dem Anflugkurs (137°).
 - **GS-Capture** nur von unten: wenn `altitude ≤ 318 × dist_NM` (3°-Gleitpfad, Schwelle = 0 ft). Danach VS so, dass der Gleitpfad gehalten wird; der Pilot reduziert selbstständig auf `vApp`, spätestens ab 5 NM.
-- **Go-Around** (Event mit reason): bei 6 NM Final nicht LOC-established (`notEstablished`); beim GS-Capture-Punkt > 300 ft über Gleitpfad (`tooHigh`); Abstand zum Vordermann auf dem Final unterschreitet die Wake-Matrix bei ≤ 4 NM (`spacing`). Missed Approach: geradeaus steigen auf 4000 ft, dann Phase VECTOR (Lotse übernimmt wieder).
+- **Go-Around** (Event mit reason): beim Passieren von 6 NM Final wird einmalig beides geprüft — nicht LOC-established ⇒ `notEstablished`, und mehr als 300 ft über dem Gleitpfad (`altitude > 318 × dist_NM + 300`) ⇒ `tooHigh`. Unabhängig davon: unterschreitet der Abstand zum Vordermann auf dem Final die Wake-Matrix bei ≤ 4 NM ⇒ `spacing`. Missed Approach: geradeaus steigen auf 4000 ft, dann Phase VECTOR (Lotse übernimmt wieder).
 - **HANDOFF** (`handoff`-Command, erlaubt ab LOC/GS und ≤ 10 NM Final): „contact tower", Flieger fliegt weiter, despawnt bei 1 NM als erfolgreich (`handoffComplete`, Phase DONE). Handoff vergessen ⇒ Flieger landet trotzdem, zählt aber nicht als sauber übergeben (Score §11.4).
 
 ## §8 Separation, Wake, STCA, MVA
@@ -191,6 +191,8 @@ Der Höhen-Stepper rechnet auf der zuletzt geklickten Freigabe weiter, nicht auf
 
 **§11.5 Score & Debriefing:** +100 je `handoffComplete`; −1000 je `separationLoss`; −300 je `mvaViolation`; −200 je `goAround` mit reason ≠ `spacing` durch Vordermann-Fehler des gleichen Spielers (v1: alle Go-Arounds zählen −200); Landung ohne Handoff: +0. Debriefing-Screen am Sessionende: Score, Zähler je Kategorie, Ø-Zeit im Sektor, Ereignisliste mit Sim-Zeitstempeln.
 
+Sessionende (Default 30 min Sim-Zeit) ist ein harter Schnitt: die Simulation hält an, das Debriefing legt sich über das Radar. Noch fliegender Verkehr zählt weder als übergeben noch als verloren, und die Ø-Zeit im Sektor rechnet nur über abgeschlossene Flüge.
+
 ## §12 Audio (M5)
 
 Prozedural via Web Audio, keine Assets: Squelch-Klick (15 ms Noise-Burst, Bandpass ~2 kHz) vor/nach jeder Transmission; leises Rausch-Bett (Gain ≤ 0.03, abschaltbar); STCA-Alarm (Zweiklang-Piep). TTS über `speechSynthesis`: pro Flieger eine Voice aus den verfügbaren englischen Stimmen (Rotation), rate 1.05–1.2 und pitch 0.9–1.1 leicht variiert (seeded). Voices laden asynchron (`voiceschanged`) — defensiv behandeln, Fallback: nur Text + SFX. Kein Versuch, speechSynthesis durch Web-Audio-Filter zu routen (geht nicht).
@@ -247,7 +249,7 @@ Getestet wird `sim/` und `phraseology.ts`, ohne Browser-Harness. Die beiden Einh
 
 **M2 — Verkehr.** Szenario-/Airport-Laden mit Validierung, Spawn-Schedule, STAR-Phase, Selektion + Klick-Panel, Separation §8 (ohne Wake), STCA, MVA. DoD: training-west.json läuft; provozierter Konflikt löst STCA und danach separationLoss aus; Tests: Separation-Paarlogik, Punkt-in-Polygon, STCA-Extrapolation.
 
-**M3 — Spielbar (MVP).** ILS-FSM §7 komplett inkl. Go-Around und Handoff; Wind aktiv; Score + Debriefing; Sessionende (Default 30 min Sim-Zeit). DoD: eine volle Session ist von Spawn bis Debriefing spielbar; Tests: LOC-Capture aus beiden Seiten + Ablehnung bei > 30°, GS-Capture nur von unten, Go-Around-Trigger.
+**M3 — Spielbar (MVP).** ILS-FSM §7 komplett inkl. Go-Around und Handoff; Wind aktiv; Score + Debriefing; Sessionende (Default 30 min Sim-Zeit). Der `spacing`-Go-Around entsteht hier mit dem einfachen 3-NM-Mindestabstand; M4 ersetzt nur die Distanz durch die Wake-Matrix. DoD: eine volle Session ist von Spawn bis Debriefing spielbar; Tests: LOC-Capture aus beiden Seiten + Ablehnung bei > 30°, GS-Capture nur von unten, Go-Around-Trigger.
 
 **M4 — Handwerk.** Wake-Staffelung auf dem Final, Hearback-Errors, `HOLD` (published Holding am Fix: Racetrack, 1-min-Legs, rechts), Messwerkzeug, `DCT`, Feinschliff Labels/Panels. DoD: Tests Wake-Matrix und Hearback-Abweichung; Holding hält Flieger stabil am Fix.
 
