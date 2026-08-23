@@ -9,6 +9,8 @@ export interface ConsoleOptions {
   /** Callsigns currently on frequency, for Tab completion. */
   callsigns: () => string[];
   onSubmit: (result: ParseResult, raw: string) => void;
+  /** "?" or "HELP" instead of a clearance opens the help (SPEC §11.6). */
+  onHelp: () => void;
 }
 
 export interface CommandConsole {
@@ -19,7 +21,7 @@ export interface CommandConsole {
 
 export function createConsole(pane: HTMLElement, options: ConsoleOptions): CommandConsole {
   pane.innerHTML = `
-    <div class="console-hint" data-ref="hint">CALLSIGN then commands — L270 R090 H360 D50 C120 S180 SN</div>
+    <div class="console-hint" data-ref="hint"></div>
     <div class="console-row">
       <span class="console-prompt">&gt;</span>
       <input class="console-input" data-ref="input" type="text" spellcheck="false"
@@ -36,6 +38,10 @@ export function createConsole(pane: HTMLElement, options: ConsoleOptions): Comma
   const history: string[] = [];
   let historyIndex = 0;
 
+  /** Shown whenever there is nothing more urgent to say. */
+  const DEFAULT_HINT = 'CALLSIGN then commands — L270 D50 S180 · ? for help';
+  hint.textContent = DEFAULT_HINT;
+
   function completeCallsign(): void {
     const value = input.value;
     const [first, ...rest] = value.split(/\s+/);
@@ -46,6 +52,12 @@ export function createConsole(pane: HTMLElement, options: ConsoleOptions): Comma
     if (matches.length === 1 && matches[0]) input.value = `${matches[0]} `;
     else if (matches.length > 1) hint.textContent = matches.join('  ');
   }
+
+  // A transient message (a refusal, a parse error) gives way as soon as the
+  // controller starts typing again.
+  input.addEventListener('input', () => {
+    if (hint.textContent !== DEFAULT_HINT) hint.textContent = DEFAULT_HINT;
+  });
 
   input.addEventListener('keydown', (ev) => {
     if (ev.key === 'Tab') {
@@ -66,6 +78,14 @@ export function createConsole(pane: HTMLElement, options: ConsoleOptions): Comma
     if (ev.key === 'Enter') {
       const raw = input.value.trim();
       if (!raw) return;
+
+      if (raw === '?' || raw.toUpperCase() === 'HELP') {
+        input.value = '';
+        hint.textContent = DEFAULT_HINT;
+        options.onHelp();
+        return;
+      }
+
       history.push(raw);
       historyIndex = history.length;
       input.value = '';

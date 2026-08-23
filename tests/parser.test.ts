@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseCommandLine } from '../src/ui/parser';
+import { COMMAND_REFERENCE, parseCommandLine } from '../src/ui/parser';
 
 describe('console parser (SPEC §11.3)', () => {
   it('reads a callsign followed by several commands', () => {
@@ -87,9 +87,48 @@ describe('console parser errors', () => {
     expect(parseCommandLine('SWR34K L2700')).toMatchObject({ ok: false, code: 'unknown-token' });
   });
 
-  it('does not accept commands that belong to later milestones yet', () => {
-    // DCT, ILS, TWR and SQ arrive with M2–M4 (SPEC §14).
-    expect(parseCommandLine('SWR34K ILS14')).toMatchObject({ ok: false, code: 'unknown-token' });
-    expect(parseCommandLine('SWR34K TWR')).toMatchObject({ ok: false, code: 'unknown-token' });
+  it('names the milestone for commands that are not built yet', () => {
+    // DCT, ILS, TWR and SQ are in the SPEC but arrive with later milestones.
+    expect(parseCommandLine('SWR34K ILS14')).toMatchObject({ ok: false, code: 'not-yet' });
+    expect(parseCommandLine('SWR34K TWR')).toMatchObject({ ok: false, code: 'not-yet' });
+    expect(parseCommandLine('SWR34K DCT AMIKI')).toMatchObject({ ok: false, code: 'not-yet' });
+    expect(parseCommandLine('SWR34K SQ4271')).toMatchObject({ ok: false, code: 'not-yet' });
+
+    const result = parseCommandLine('SWR34K ILS14');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.message).toContain('M3');
+  });
+});
+
+describe('command reference (SPEC §11.6)', () => {
+  it('documents every command the parser accepts, and nothing else', () => {
+    // The in-game help is built from this table, so it must not drift.
+    const documented = COMMAND_REFERENCE.map((doc) => doc.syntax);
+    expect(new Set(documented).size).toBe(documented.length);
+    expect(documented).toContain('L<hdg>');
+    expect(documented).toContain('SN');
+  });
+
+  it('parses every sample that is marked as available', () => {
+    for (const doc of COMMAND_REFERENCE.filter((d) => !d.comingIn)) {
+      const result = parseCommandLine(`SWR34K ${doc.sample}`);
+      expect(result.ok, `${doc.syntax} (${doc.sample}) should parse`).toBe(true);
+      if (result.ok) expect(result.commands).toHaveLength(1);
+    }
+  });
+
+  it('rejects every sample that is still pending, with its own error code', () => {
+    for (const doc of COMMAND_REFERENCE.filter((d) => d.comingIn)) {
+      const result = parseCommandLine(`SWR34K ${doc.sample}`);
+      expect(result.ok, `${doc.syntax} should not be accepted yet`).toBe(false);
+      if (!result.ok) expect(result.code).toBe('not-yet');
+    }
+  });
+
+  it('explains what a pending command will do once it exists', () => {
+    for (const doc of COMMAND_REFERENCE.filter((d) => d.comingIn)) {
+      const result = parseCommandLine(`SWR34K ${doc.sample}`);
+      if (!result.ok) expect(result.message).toContain(doc.meaning);
+    }
   });
 });

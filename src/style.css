@@ -133,3 +133,94 @@ body {
 }
 .console-input:focus { border-color: var(--accent); }
 .console-input::placeholder { color: var(--text); opacity: 0.3; }
+
+/* --- Help overlay (SPEC §11.6) --- */
+
+.help-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.help-overlay[hidden] { display: none; }
+
+.help-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgb(0 0 0 / 0.6);
+}
+
+.help-dialog {
+  position: relative;
+  width: min(920px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 16px 20px 20px;
+  background: var(--panel);
+  border: 1px solid var(--map);
+  border-radius: 4px;
+  box-shadow: 0 12px 40px rgb(0 0 0 / 0.5);
+}
+
+.help-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--map);
+}
+.help-head h2 { margin: 0; font-size: 15px; letter-spacing: 2px; color: var(--accent); }
+
+.help-section { margin-bottom: 16px; }
+.help-section h3 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: var(--accent);
+  opacity: 0.9;
+}
+
+.help-lead { margin: 0 0 8px; line-height: 1.5; opacity: 0.85; }
+.help-lead code {
+  padding: 1px 4px;
+  border: 1px solid var(--map);
+  border-radius: 2px;
+}
+.help-dim { opacity: 0.5; margin-top: 10px; }
+
+.help-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0 20px;
+}
+
+.help-table { width: 100%; border-collapse: collapse; }
+.help-table td { padding: 2px 0; vertical-align: baseline; line-height: 1.45; }
+.help-key { color: var(--accent); white-space: nowrap; padding-right: 12px !important; }
+/* Shortcut labels are phrases, not tokens — let them wrap instead of
+   squeezing the description into a sliver. */
+.help-table.is-shortcuts .help-key { white-space: normal; }
+.help-what { opacity: 0.85; }
+.help-table tr.is-pending .help-key,
+.help-table tr.is-pending .help-what { opacity: 0.45; }
+.help-pending {
+  margin-left: 4px;
+  padding: 0 4px;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  font-size: 10px;
+  opacity: 0.8;
+}
+
+.help-block {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--map);
+  border-radius: 3px;
+  line-height: 1.35;
+  width: max-content;
+}
