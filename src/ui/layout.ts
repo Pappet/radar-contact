@@ -6,6 +6,7 @@ export interface LayoutRefs {
   speedButtons: HTMLButtonElement[];
   pauseButton: HTMLButtonElement;
   themeButton: HTMLButtonElement;
+  helpButton: HTMLButtonElement;
   seedLabel: HTMLElement;
   scopePane: HTMLElement;
   radioPane: HTMLElement;
@@ -25,6 +26,7 @@ export function buildLayout(mount: HTMLElement): LayoutRefs {
         <span class="rate" data-ref="rates"></span>
         <button class="btn" data-ref="pause">Pause</button>
         <span class="spacer"></span>
+        <button class="btn" data-ref="help" title="Controls and commands (F1)">? Help</button>
         <button class="btn" data-ref="theme">Theme: classic</button>
         <span class="seed" data-ref="seed"></span>
       </header>
@@ -59,6 +61,7 @@ export function buildLayout(mount: HTMLElement): LayoutRefs {
     speedButtons,
     pauseButton: pick<HTMLButtonElement>('pause'),
     themeButton: pick<HTMLButtonElement>('theme'),
+    helpButton: pick<HTMLButtonElement>('help'),
     seedLabel: pick('seed'),
     scopePane: pick('scope'),
     radioPane: pick('radio'),
