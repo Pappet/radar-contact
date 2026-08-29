@@ -19,7 +19,6 @@ import {
   LOC_CORRECTION_DEG_PER_NM,
   LOC_CORRECTION_MAX_DEG,
   MISSED_APPROACH_ALT_FT,
-  SEPARATION_HORIZONTAL_NM,
   SPACING_CHECK_NM,
   TICK_SECONDS,
   TOUCHDOWN_NM,
@@ -27,6 +26,7 @@ import {
 import { emit } from './events';
 import { angleDiff, clamp, normalizeDeg, polarToVec, sub, type Vec2 } from './geo';
 import { headingForTrack, windAt } from './physics';
+import { wakeMinInTrailNm } from './separation';
 import type { Runway } from './scenario';
 import type { SimState } from './state';
 import { pilotGoingAround } from '../phraseology';
@@ -192,11 +192,11 @@ export function updateApproach(state: SimState, ac: AircraftState): void {
 
   if (!established) return;
 
-  // SPEC §7: spacing to the aircraft ahead, judged from four miles inwards.
-  // M4 replaces the flat minimum with the wake matrix (SPEC §14).
+  // SPEC §7/§8: spacing to the aircraft ahead is judged from four miles
+  // inwards, against the wake turbulence minimum for the pair (M4).
   if (geometry.distance <= SPACING_CHECK_NM) {
     const ahead = precedingOnFinal(ac, state.aircraft, runway);
-    if (ahead && ahead.gap < SEPARATION_HORIZONTAL_NM) {
+    if (ahead && ahead.gap < wakeMinInTrailNm(ahead.other.wake, ac.wake)) {
       goAround(state, ac, 'spacing');
       return;
     }

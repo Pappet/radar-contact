@@ -13,8 +13,12 @@ const airport = loadTrainingWest();
 const runway = airport.runways[0]!;
 
 function session(seed: number): { state: SimState; log: SimEventRecord[] } {
-  // The sector wind is on from M3 (SPEC §14).
-  return { state: createSimState({ seed, airport, wind: airport.windProfile }), log: [] };
+  // The sector wind is on from M3 (SPEC §14); hearback errors stay off so
+  // these M3 flight profiles remain deterministic (they have their own tests).
+  return {
+    state: createSimState({ seed, airport, wind: airport.windProfile, hearbackErrorRate: 0 }),
+    log: [],
+  };
 }
 
 function run(state: SimState, log: SimEventRecord[], seconds: number): void {

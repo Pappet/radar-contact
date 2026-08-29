@@ -37,6 +37,13 @@ function sessionLengthFromLocation(): number {
   return Number.isFinite(minutes) && minutes > 0 ? Math.round(minutes * 60) : SESSION_LENGTH_S;
 }
 
+/** The hearback error rate (SPEC §6) may be tuned with ?hearback=0…1. */
+function hearbackRateFromLocation(): number | undefined {
+  const fromUrl = new URLSearchParams(window.location.search).get('hearback');
+  const parsed = fromUrl ? Number(fromUrl) : Number.NaN;
+  return Number.isFinite(parsed) && parsed >= 0 && parsed <= 1 ? parsed : undefined;
+}
+
 function applyTheme(theme: ThemeName): void {
   const palette = THEMES[theme];
   const style = document.documentElement.style;
@@ -88,6 +95,7 @@ function main(): void {
     airport,
     // SPEC §14: from M3 the sector flies with its own wind profile.
     wind: airport.windProfile,
+    hearbackErrorRate: hearbackRateFromLocation(),
   });
 
   /** Everything that happened, for the debriefing (SPEC §11.5). */
@@ -153,6 +161,7 @@ function main(): void {
       runway: airport.runways[0]?.id ?? '14',
       canHandOff: canHandOff(state, ac),
       clearedIls: ac.clearedIls !== undefined,
+      ...(ac.holding ? { holdingAt: ac.holding.fix } : {}),
       ...(ac.target.heading ? { targetHeading: ac.target.heading.deg } : {}),
     };
     panel.update(view);

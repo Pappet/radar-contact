@@ -85,6 +85,15 @@ body {
 .panel-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
 .panel-callsign { color: var(--accent); font-size: 15px; letter-spacing: 1px; }
 .panel-type { opacity: 0.6; font-size: 11px; }
+/* The aircraft is flying a racetrack hold (M4). */
+.panel-holding {
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  padding: 1px 5px;
+}
 .panel-grid { display: flex; gap: 10px; align-items: center; }
 .panel-rose { cursor: crosshair; flex: none; }
 .panel-controls { display: flex; flex-direction: column; gap: 8px; min-width: 0; }

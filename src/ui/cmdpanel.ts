@@ -19,6 +19,8 @@ export interface PanelView {
   canHandOff: boolean;
   /** True once the ILS clearance has been given. */
   clearedIls: boolean;
+  /** Fix the aircraft is holding at, while it holds (M4). */
+  holdingAt?: string;
   /** Current values, as the radar shows them. */
   altitude: number;
   heading: number;
@@ -57,6 +59,7 @@ export function createCommandPanel(
       <div class="panel-head">
         <span class="panel-callsign" data-ref="callsign"></span>
         <span class="panel-type" data-ref="type"></span>
+        <span class="panel-holding" data-ref="holding" hidden></span>
       </div>
       <div class="panel-grid">
         <canvas class="panel-rose" data-ref="rose"
@@ -89,6 +92,7 @@ export function createCommandPanel(
   const body = pick('body');
   const callsignEl = pick('callsign');
   const typeEl = pick('type');
+  const holdingEl = pick('holding');
   const rose = pick<HTMLCanvasElement>('rose');
   const altInput = pick<HTMLInputElement>('alt-input');
   const speedsRow = pick('speeds');
@@ -241,6 +245,10 @@ export function createCommandPanel(
 
     callsignEl.textContent = view.callsign;
     typeEl.textContent = `${view.type} · ${Math.round(view.altitude)} ft · ${Math.round(view.ias)} kt`;
+
+    // The hold is procedure state the data block cannot show (SPEC §11.4).
+    holdingEl.textContent = view.holdingAt ? `HOLD ${view.holdingAt}` : '';
+    holdingEl.hidden = !view.holdingAt;
 
     // Never fight the controller for the input they are typing in.
     if (document.activeElement !== altInput) {

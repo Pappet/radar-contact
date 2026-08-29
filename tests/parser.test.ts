@@ -88,13 +88,46 @@ describe('console parser errors', () => {
   });
 
   it('names the milestone for commands that are not built yet', () => {
-    // DCT and SQ are in the SPEC but arrive later.
-    expect(parseCommandLine('SWR34K DCT AMIKI')).toMatchObject({ ok: false, code: 'not-yet' });
-    expect(parseCommandLine('SWR34K SQ4271')).toMatchObject({ ok: false, code: 'not-yet' });
+    // SQ is in the SPEC but is not built yet; DCT parses since M4.
+    const pending = parseCommandLine('SWR34K SQ4271');
+    expect(pending).toMatchObject({ ok: false, code: 'not-yet' });
+    if (!pending.ok) expect(pending.message).toContain('not built yet');
+  });
+});
 
-    const result = parseCommandLine('SWR34K DCT AMIKI');
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.message).toContain('M4');
+describe('navigation clearances (SPEC §11.3, M4)', () => {
+  it('reads a direct clearance with its fix', () => {
+    expect(parseCommandLine('SWR34K DCT AMIKI')).toEqual({
+      ok: true,
+      callsign: 'SWR34K',
+      commands: [{ kind: 'direct', fix: 'AMIKI' }],
+    });
+    expect(parseCommandLine('swr34k dct nokra')).toMatchObject({
+      commands: [{ kind: 'direct', fix: 'NOKRA' }],
+    });
+  });
+
+  it('reads a holding clearance with its fix', () => {
+    expect(parseCommandLine('SWR34K HOLD OKTAV')).toEqual({
+      ok: true,
+      callsign: 'SWR34K',
+      commands: [{ kind: 'hold', fix: 'OKTAV' }],
+    });
+  });
+
+  it('takes the fix from the token after DCT/HOLD and keeps parsing', () => {
+    expect(parseCommandLine('SWR34K DCT AMIKI D50')).toMatchObject({
+      commands: [
+        { kind: 'direct', fix: 'AMIKI' },
+        { kind: 'altitude', ft: 5000 },
+      ],
+    });
+  });
+
+  it('rejects a bare DCT/HOLD and a malformed fix name', () => {
+    expect(parseCommandLine('SWR34K DCT')).toMatchObject({ ok: false, code: 'bad-value' });
+    expect(parseCommandLine('SWR34K HOLD')).toMatchObject({ ok: false, code: 'bad-value' });
+    expect(parseCommandLine('SWR34K DCT A')).toMatchObject({ ok: false, code: 'bad-value' });
   });
 });
 

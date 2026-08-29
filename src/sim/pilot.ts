@@ -6,6 +6,8 @@ import { aircraftProfile, normalSpeed, type AircraftState, type AircraftTypeProf
 import { canHandOff } from './approach';
 import type { Command } from './commands';
 import {
+  HEARBACK_ALTITUDE_ERROR_FT,
+  HEARBACK_HEADING_ERROR_DEG,
   PILOT_DELAY_MAX_S,
   PILOT_DELAY_MEAN_S,
   PILOT_DELAY_MIN_S,
@@ -14,10 +16,11 @@ import {
   SPEED_RESTRICTION_IAS_KT,
 } from './constants';
 import { emit } from './events';
-import { clamp } from './geo';
-import { phaseAfterCommand } from './phases';
+import { applyHoldClearance, cancelHolding } from './holding';
+import { clamp, normalizeDeg } from './geo';
+import { phaseAfterCommand, type Phase } from './phases';
 import { pilotReadback, pilotUnable } from '../phraseology';
-import { randomNormal } from './rng';
+import { nextRandom, randomInt, randomNormal } from './rng';
 import { towerFrequency, type SimState } from './state';
 
 /** SPEC §6: N(3.5, 1) seconds of sim time, clamped to [2, 6]. */
@@ -46,6 +49,11 @@ export function rejectionReason(
     return `no runway ${cmd.runway}`;
   }
 
+  // Navigation clearances aim at a fix — an unknown one cannot be flown.
+  if ((cmd.kind === 'direct' || cmd.kind === 'hold') && !state.airport?.fixes[cmd.fix]) {
+    return 'unknown fix';
+  }
+
   if (cmd.kind !== 'speed' || cmd.kt === 'normal') return null;
   if (ac.altitude < SPEED_RESTRICTION_ALT_FT && cmd.kt > SPEED_RESTRICTION_IAS_KT) {
     return 'speed restriction';
@@ -66,6 +74,7 @@ export function applyCommand(
     case 'heading':
       ac.target.heading = { deg: cmd.deg, turn: cmd.turn };
       delete ac.target.directTo;
+      cancelHolding(ac);
       break;
     case 'altitude':
       ac.target.altitude = cmd.ft;
@@ -78,6 +87,7 @@ export function applyCommand(
       break;
     case 'ils':
       // SPEC §7: the aircraft keeps its current targets until it captures.
+      cancelHolding(ac);
       ac.clearedIls = cmd.runway;
       ac.phase = 'CLEARED_ILS';
       break;
@@ -86,10 +96,60 @@ export function applyCommand(
       ac.phase = 'HANDOFF';
       break;
     case 'direct':
+      // Steers at the fix every tick from now on (SPEC §5.2); the hold and
+      // any approach clearance are replaced by it.
+      cancelHolding(ac);
+      if (isApproachPhase(ac.phase)) {
+        delete ac.clearedIls;
+        ac.phase = 'VECTOR';
+      }
+      ac.target.directTo = cmd.fix;
+      break;
     case 'hold':
-      // Navigation clearances arrive with M4 (SPEC §14).
+      // Racetrack at the fix (SPEC §14 M4); replaces the approach clearance.
+      applyHoldClearance(ac, cmd.fix);
       break;
   }
+}
+
+const APPROACH_PHASES: Phase[] = ['CLEARED_ILS', 'LOC', 'GS'];
+
+function isApproachPhase(phase: Phase): boolean {
+  return APPROACH_PHASES.includes(phase);
+}
+
+/**
+ * SPEC §6 (M4): with the configured chance per transmission the pilot
+ * mishears exactly one numeric value — an altitude by ±1000 ft or a heading
+ * by ±10°. The wrong number is both read back and executed, so a wrong
+ * readback is the controller's cue; a corrective re-clearance fixes it.
+ * Transmissions without a numeric value cannot be misheard.
+ */
+export function applyHearbackError(state: SimState, accepted: Command[]): Command[] {
+  // Rate 0 must stay RNG-neutral: no roll, no draw, so seeds replay exactly
+  // as they did before the hearback feature existed.
+  if (state.hearbackErrorRate <= 0) return accepted;
+  if (nextRandom(state) >= state.hearbackErrorRate) return accepted;
+
+  const numeric = accepted
+    .map((cmd, index) => ({ cmd, index }))
+    .filter(({ cmd }) => cmd.kind === 'heading' || cmd.kind === 'altitude');
+  if (numeric.length === 0) return accepted;
+
+  const misheard = numeric[randomInt(state, 0, numeric.length - 1)];
+  if (!misheard) return accepted;
+  const sign = randomInt(state, 0, 1) === 0 ? -1 : 1;
+
+  return accepted.map((cmd, index) => {
+    if (index !== misheard.index) return cmd;
+    if (cmd.kind === 'heading') {
+      return { ...cmd, deg: normalizeDeg(cmd.deg + sign * HEARBACK_HEADING_ERROR_DEG) };
+    }
+    if (cmd.kind === 'altitude') {
+      return { ...cmd, ft: Math.max(0, cmd.ft + sign * HEARBACK_ALTITUDE_ERROR_FT) };
+    }
+    return cmd;
+  });
 }
 
 /**
@@ -106,6 +166,9 @@ export function processPilotQueue(state: SimState, ac: AircraftState): void {
   const profile = aircraftProfile(ac.type);
 
   for (const entry of due) {
+    // A new transmission supersedes whatever the pilot misheard last time.
+    delete ac.pilot.hearbackTaken;
+
     const accepted: Command[] = [];
     const refusals: string[] = [];
 
@@ -119,18 +182,23 @@ export function processPilotQueue(state: SimState, ac: AircraftState): void {
     }
 
     if (accepted.length > 0) {
+      // SPEC §6: the hearback roll happens once per transmission, before the
+      // readback — the wrong number is heard, read back *and* executed.
+      const heard = applyHearbackError(state, accepted);
+      if (heard !== accepted) ac.pilot.hearbackTaken = heard;
+
       emit(state, {
         kind: 'transmission',
         from: 'pilot',
         callsign: ac.callsign,
-        text: pilotReadback(accepted, {
+        text: pilotReadback(heard, {
           callsign: ac.callsign,
           altitude: ac.altitude,
           ias: ac.ias,
           towerFreq: towerFrequency(state),
         }),
       });
-      for (const cmd of accepted) applyCommand(ac, cmd, profile);
+      for (const cmd of heard) applyCommand(ac, cmd, profile);
     }
 
     for (const reason of refusals) {

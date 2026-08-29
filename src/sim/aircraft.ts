@@ -49,6 +49,23 @@ export interface AircraftTargets {
   directTo?: string;
 }
 
+/**
+ * Published holding at a fix (SPEC §4, §14 M4): a racetrack flown with right
+ * turns. The outbound leg runs one minute as a wind-corrected track; the
+ * inbound leg flies at the fix and ends when the fix is crossed, so the
+ * pattern re-centres itself every circuit instead of drifting away.
+ */
+export interface HoldingState {
+  /** Fix the pattern is flown around. */
+  fix: string;
+  /** 'entry': not yet at the fix; the legs of the racetrack afterwards. */
+  leg: 'entry' | 'turnOut' | 'outbound' | 'turnIn' | 'inbound';
+  /** Ground track across the fix; the outbound leg flies its reciprocal. */
+  inboundTrack: number;
+  /** Seconds flown on the current straight leg. */
+  legSeconds: number;
+}
+
 export interface AircraftState {
   id: string;
   callsign: string;
@@ -73,6 +90,8 @@ export interface AircraftState {
   squawk: string;
   onFrequency: boolean;
   clearedIls?: string;
+  /** Set while the aircraft flies a racetrack hold (M4). */
+  holding?: HoldingState;
   pilot: { queue: PilotQueueEntry[]; hearbackTaken?: Command[] };
   /** Sim time (s) of the spawn */
   spawnedAt: number;

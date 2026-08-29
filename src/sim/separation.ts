@@ -3,7 +3,7 @@
  * the tick decides when to run them and which events to raise.
  */
 
-import type { AircraftState } from './aircraft';
+import type { AircraftState, WakeCategory } from './aircraft';
 import {
   MVA_BUFFER_FT,
   SEPARATION_CEILING_FT,
@@ -11,6 +11,7 @@ import {
   SEPARATION_VERTICAL_FT,
   STCA_LOOKAHEAD_S,
   STCA_STEP_S,
+  WAKE_IN_TRAIL_NM,
 } from './constants';
 import { distanceNm, polarToVec, type Vec2 } from './geo';
 import type { MvaSector } from './scenario';
@@ -18,6 +19,15 @@ import type { MvaSector } from './scenario';
 export interface Pair {
   a: string;
   b: string;
+}
+
+/**
+ * SPEC §8: the wake turbulence radar spacing minimum behind a leader, flown
+ * by a follower of the given category. Behind heavy: heavy 4 / medium 5 /
+ * light 6 NM; a light behind a medium: 5 NM; everything else: 3 NM.
+ */
+export function wakeMinInTrailNm(leader: WakeCategory, follower: WakeCategory): number {
+  return WAKE_IN_TRAIL_NM[leader][follower];
 }
 
 /** Order-independent key, so a pair debounces as one thing. */

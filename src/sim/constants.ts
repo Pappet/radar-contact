@@ -45,6 +45,14 @@ export const PILOT_DELAY_SIGMA_S = 1.0;
 export const PILOT_DELAY_MIN_S = 2;
 export const PILOT_DELAY_MAX_S = 6;
 
+// --- Hearback error (SPEC §6, M4) ---
+/** Chance per transmission that the pilot mishears exactly one number. */
+export const HEARBACK_ERROR_RATE = 0.03;
+/** How far an altitude readback/executed value deviates. */
+export const HEARBACK_ALTITUDE_ERROR_FT = 1000;
+/** How far a heading readback/executed value deviates. */
+export const HEARBACK_HEADING_ERROR_DEG = 10;
+
 // --- Separation (SPEC §8) ---
 /** Horizontal minimum between two aircraft. */
 export const SEPARATION_HORIZONTAL_NM = 3.0;
@@ -95,6 +103,20 @@ export const HANDOFF_MAX_NM = 10;
 export const TOUCHDOWN_NM = 1;
 /** In-trail spacing on the final is judged from here inwards. */
 export const SPACING_CHECK_NM = 4;
+
+// --- Wake turbulence in-trail minima on the final (SPEC §8, M4) ---
+/** [leader][follower] in NM. Behind H: H 4 / M 5 / L 6; L behind M: 5; else 3. */
+export const WAKE_IN_TRAIL_NM: Record<'L' | 'M' | 'H', Record<'L' | 'M' | 'H', number>> = {
+  H: { H: 4, M: 5, L: 6 },
+  M: { H: 3, M: 3, L: 5 },
+  L: { H: 3, M: 3, L: 3 },
+};
+
+// --- Holding (SPEC §4, §14 M4) ---
+/** The outbound leg of the racetrack is flown for one minute. */
+export const HOLD_OUTBOUND_LEG_S = 60;
+/** Headings within this tolerance of the target count as rolled out. */
+export const HOLD_ROLLOUT_TOLERANCE_DEG = 0.5;
 
 // --- Session and score (SPEC §11.5) ---
 /** Default session length in sim seconds. */

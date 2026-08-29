@@ -19,11 +19,16 @@ export type Phase =
   | 'DONE';
 
 /**
- * SPEC §7: any heading or direct clearance takes an aircraft off its STAR
- * and puts it under radar vectors.
+ * SPEC §7: any heading, direct or holding clearance takes an aircraft off its
+ * STAR and puts it under radar vectors.
  */
 export function phaseAfterCommand(phase: Phase, cmd: Command): Phase {
-  if (phase === 'STAR' && (cmd.kind === 'heading' || cmd.kind === 'direct')) return 'VECTOR';
+  if (
+    phase === 'STAR' &&
+    (cmd.kind === 'heading' || cmd.kind === 'direct' || cmd.kind === 'hold')
+  ) {
+    return 'VECTOR';
+  }
   return phase;
 }
 

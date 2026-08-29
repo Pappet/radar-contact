@@ -6,9 +6,10 @@
  */
 
 import { aircraftProfile, hasLeftSector, type AircraftState, type WakeCategory } from './aircraft';
-import { SNAPSHOT_INTERVAL_S, TICK_SECONDS, TRAIL_LENGTH } from './constants';
+import { HEARBACK_ERROR_RATE, SNAPSHOT_INTERVAL_S, TICK_SECONDS, TRAIL_LENGTH } from './constants';
 import { emit, type SimEventRecord } from './events';
 import type { Vec2 } from './geo';
+import { updateHolding } from './holding';
 import type { Phase } from './phases';
 import { updateStarNavigation } from './phases';
 import { updateApproach } from './approach';
@@ -70,6 +71,11 @@ export interface SimState {
   snapshot: RadarSnapshot | null;
   wind: WindProfile;
   airport: Airport | null;
+  /**
+   * Chance per transmission that a pilot mishears one numeric value
+   * (SPEC §6, M4). Tests that pin down pre-M4 behaviour set it to 0.
+   */
+  hearbackErrorRate: number;
   /** Scheduled traffic still to come, earliest first (SPEC §13.2). */
   pendingSpawns: SpawnEntry[];
   /** Callsign pairs currently under a conflict alert, refreshed every 4 s. */
@@ -91,6 +97,8 @@ export interface SimStateOptions {
    * opt-in rather than taken from the airport automatically.
    */
   wind?: WindProfile;
+  /** Overrides the default hearback error rate (SPEC §6). */
+  hearbackErrorRate?: number;
 }
 
 const NO_FIXES: Readonly<Record<string, Vec2>> = {};
@@ -107,6 +115,7 @@ export function createSimState(options: SimStateOptions = {}): SimState {
     snapshot: null,
     wind: options.wind ?? CALM,
     airport,
+    hearbackErrorRate: options.hearbackErrorRate ?? HEARBACK_ERROR_RATE,
     pendingSpawns: airport ? [...airport.spawn] : [],
     stcaPairs: [],
     activeConflicts: [],
@@ -242,6 +251,7 @@ export function tick(state: SimState): void {
     processPilotQueue(state, ac);
     updateStarNavigation(ac, fixes);
     updateApproach(state, ac);
+    updateHolding(ac, fixes, state.wind, TICK_SECONDS);
     // The approach can take the aircraft out of the sector mid-tick.
     if (hasLeftSector(ac)) continue;
     stepAircraft(ac, aircraftProfile(ac.type), state.wind, fixes, TICK_SECONDS);
