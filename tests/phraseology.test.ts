@@ -73,6 +73,13 @@ describe('ATC transmissions', () => {
       ),
     ).toBe('SWR34K, turn left heading 270, descend and maintain 5000 feet');
   });
+
+  it('speaks the holding clearance as published (M4)', () => {
+    expect(atcTransmission([{ kind: 'hold', fix: 'AMIKI' }], ctx)).toBe(
+      'SWR34K, hold at AMIKI as published',
+    );
+    expect(pilotReadback([{ kind: 'hold', fix: 'AMIKI' }], ctx)).toBe('hold at AMIKI, SWR34K');
+  });
 });
 
 describe('readbacks', () => {

@@ -10,10 +10,12 @@ import { blipScreenPos, drawBlip, drawTrail, hitsBlip } from './blips';
 import { drawLabel, labelRect, rectContains } from './labels';
 import { createMapLayer } from './maps';
 import { THEMES, type ThemeName } from './theme';
+import { drawMeasurement } from './tools';
 import {
   createTransform,
   fitScale,
   panByPixels,
+  screenToNm,
   zoomAt,
   type Transform,
   type Viewport,
@@ -36,6 +38,12 @@ type Drag =
   | { mode: 'pan'; last: Vec2; moved: boolean }
   | { mode: 'label'; id: string; grab: Vec2; start: Vec2 };
 
+/** Right-drag state of the measuring tool (SPEC §9, M4). */
+interface Measure {
+  from: Vec2;
+  to: Vec2;
+}
+
 export function createScope(
   container: HTMLElement,
   airport: Airport,
@@ -57,6 +65,8 @@ export function createScope(
   let snapshot: RadarSnapshot | null = null;
   let selectedId: string | null = null;
   let drag: Drag | null = null;
+  /** Active right-drag, or the last finished measurement to keep showing. */
+  let measure: Measure | null = null;
 
   function resize(): void {
     viewport = {
@@ -88,6 +98,17 @@ export function createScope(
     return null;
   }
 
+  /** The contact whose blip sits under the point — labels do not count. */
+  function blipAt(point: Vec2): RadarContact | null {
+    if (!snapshot) return null;
+    for (let i = snapshot.contacts.length - 1; i >= 0; i -= 1) {
+      const contact = snapshot.contacts[i];
+      if (!contact) continue;
+      if (hitsBlip(blipScreenPos(transform, viewport, contact), point)) return contact;
+    }
+    return null;
+  }
+
   function select(id: string | null): void {
     if (selectedId === id) return;
     selectedId = id;
@@ -95,8 +116,21 @@ export function createScope(
   }
 
   function onPointerDown(ev: PointerEvent): void {
-    if (ev.button !== 0) return;
     const point = pointerPos(ev);
+
+    // SPEC §9: the right button measures from blip to blip.
+    if (ev.button === 2) {
+      const hit = blipAt(point);
+      measure = {
+        from: hit ? hit.pos : screenToNm(transform, viewport, point),
+        to: hit ? hit.pos : screenToNm(transform, viewport, point),
+      };
+      canvas.setPointerCapture(ev.pointerId);
+      return;
+    }
+    if (ev.button !== 0) return;
+
+    measure = null; // a left click clears the finished measurement
     const hit = hitTest(point);
     canvas.setPointerCapture(ev.pointerId);
 
@@ -119,6 +153,13 @@ export function createScope(
   }
 
   function onPointerMove(ev: PointerEvent): void {
+    if (measure) {
+      // Snap onto a blip when the cursor comes near one.
+      const point = pointerPos(ev);
+      const hit = blipAt(point);
+      measure.to = hit ? hit.pos : screenToNm(transform, viewport, point);
+      return;
+    }
     if (!drag) return;
     const point = pointerPos(ev);
 
@@ -140,8 +181,20 @@ export function createScope(
 
   function onPointerUp(ev: PointerEvent): void {
     if (canvas.hasPointerCapture(ev.pointerId)) canvas.releasePointerCapture(ev.pointerId);
+    // A finished measurement stays on the scope until the next left click.
+    if (ev.button === 2) return;
     if (drag?.mode === 'pan' && !drag.moved) select(null);
     drag = null;
+  }
+
+  function onPointerLeave(): void {
+    // Losing the pointer mid-drag must not leave a stray line behind.
+    measure = null;
+    drag = null;
+  }
+
+  function onContextMenu(ev: MouseEvent): void {
+    ev.preventDefault();
   }
 
   function onWheel(ev: WheelEvent): void {
@@ -153,7 +206,9 @@ export function createScope(
   canvas.addEventListener('pointerdown', onPointerDown);
   canvas.addEventListener('pointermove', onPointerMove);
   canvas.addEventListener('pointerup', onPointerUp);
-  canvas.addEventListener('pointercancel', onPointerUp);
+  canvas.addEventListener('pointercancel', onPointerLeave);
+  canvas.addEventListener('pointerleave', onPointerLeave);
+  canvas.addEventListener('contextmenu', onContextMenu);
   canvas.addEventListener('wheel', onWheel, { passive: false });
 
   const observer = new ResizeObserver(resize);
@@ -187,7 +242,8 @@ export function createScope(
         drawLabel(ctx, contact, blipScreenPos(transform, viewport, contact), palette, options);
       }
 
-      // The measuring tool (M4) draws on top of this.
+      // SPEC §9: the measuring tool draws on top of everything.
+      if (measure) drawMeasurement(ctx, measure, transform, viewport, palette);
     },
     setTheme(next) {
       theme = next;
@@ -203,7 +259,9 @@ export function createScope(
       canvas.removeEventListener('pointerdown', onPointerDown);
       canvas.removeEventListener('pointermove', onPointerMove);
       canvas.removeEventListener('pointerup', onPointerUp);
-      canvas.removeEventListener('pointercancel', onPointerUp);
+      canvas.removeEventListener('pointercancel', onPointerLeave);
+      canvas.removeEventListener('pointerleave', onPointerLeave);
+      canvas.removeEventListener('contextmenu', onContextMenu);
       canvas.removeEventListener('wheel', onWheel);
       canvas.remove();
     },

@@ -22,7 +22,8 @@ const RADAR_HELP: Shortcut[] = [
   { keys: 'Wheel', what: 'Zoom around the cursor' },
   { keys: 'Click blip', what: 'Select the aircraft' },
   { keys: 'Drag label', what: 'Move the data block aside' },
-  { keys: 'Click ground', what: 'Deselect' },
+  { keys: 'Right-drag', what: 'Measure blip to blip — distance and bearing' },
+  { keys: 'Click ground', what: 'Deselect / clear the measurement' },
 ];
 
 const PANEL_HELP: Shortcut[] = [

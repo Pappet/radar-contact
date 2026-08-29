@@ -11,7 +11,12 @@ import {
 } from '../src/sim/state';
 
 function withOneArrival(seed = 1): SimState {
-  const state = createSimState({ seed, airport: loadTrainingWest() });
+  // Rate 0 keeps these M1–M3 assertions independent of the hearback feature.
+  const state = createSimState({
+    seed,
+    airport: loadTrainingWest(),
+    hearbackErrorRate: 0,
+  });
   spawnAircraft(state, {
     callsign: 'SWR34K',
     type: 'A320',

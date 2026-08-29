@@ -77,7 +77,11 @@ describe('STAR navigation (SPEC §7)', () => {
   });
 
   it('drops out of the STAR as soon as it is vectored', () => {
-    const state = createSimState({ seed: 5, airport: loadTrainingWest() });
+    const state = createSimState({
+      seed: 5,
+      airport: loadTrainingWest(),
+      hearbackErrorRate: 0,
+    });
     run(state, 20);
     const ac = state.aircraft[0]!;
 

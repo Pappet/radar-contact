@@ -2,8 +2,8 @@
  * Console grammar (SPEC §11.3): `CALLSIGN CMD [CMD ...]`, case-insensitive.
  * Pure text → Command[]; the console widget only handles the DOM around it.
  *
- * M1 covers L/R/H, D/C, S/SN. DCT, ILS, TWR and SQ arrive with M2–M4 and are
- * rejected until then.
+ * M1 covers L/R/H, D/C, S/SN; M3 added ILS and TWR; M4 adds DCT and HOLD.
+ * SQ is written down but not built yet and is rejected until then.
  */
 
 import type { Command, TurnDirection } from '../sim/commands';
@@ -41,7 +41,8 @@ export const COMMAND_REFERENCE: CommandDoc[] = [
   { syntax: 'SN', sample: 'SN', meaning: 'Resume normal speed' },
   { syntax: 'ILS<rwy>', sample: 'ILS14', meaning: 'Cleared ILS approach runway 14' },
   { syntax: 'TWR', sample: 'TWR', meaning: 'Contact tower — hand the aircraft off' },
-  { syntax: 'DCT <fix>', sample: 'DCT AMIKI', meaning: 'Proceed direct to a fix', comingIn: 'M4' },
+  { syntax: 'DCT <fix>', sample: 'DCT AMIKI', meaning: 'Proceed direct to a fix' },
+  { syntax: 'HOLD <fix>', sample: 'HOLD AMIKI', meaning: 'Hold at the fix — racetrack, 1-minute legs, right turns' },
   { syntax: 'SQ<code>', sample: 'SQ4271', meaning: 'Squawk 4271', comingIn: 'later' },
 ];
 
@@ -62,6 +63,14 @@ const HEADING = /^([LRH])(\d{1,3})$/;
 const ALTITUDE = /^([DC])(\d{1,3})$/;
 const SPEED = /^S(\d{2,3})$/;
 const ILS = /^ILS(\d{2}[LRC]?)$/;
+/** Fix names are short alphanumeric blocks, e.g. AMIKI. */
+const FIX = /^[A-Z0-9]{2,6}$/;
+
+/** Commands that take the fix name as a second token. */
+const FIX_COMMANDS: Record<string, 'direct' | 'hold'> = {
+  DCT: 'direct',
+  HOLD: 'hold',
+};
 
 /** Hundreds of feet, as flown in the console: D50 → 5000 ft. */
 const MIN_ALTITUDE_HUNDREDS = 1;
@@ -149,7 +158,34 @@ export function parseCommandLine(input: string): ParseResult {
   }
 
   const commands: Command[] = [];
-  for (const token of rest) {
+  for (let i = 0; i < rest.length; i += 1) {
+    const token = rest[i] as string;
+
+    // DCT and HOLD read their fix from the next token (SPEC §11.3).
+    const fixCommand = FIX_COMMANDS[token];
+    if (fixCommand) {
+      const fix = rest[i + 1];
+      if (fix === undefined) {
+        return {
+          ok: false,
+          code: 'bad-value',
+          message: `${token} needs a fix, e.g. ${token} AMIKI`,
+          callsign,
+        };
+      }
+      if (!FIX.test(fix)) {
+        return {
+          ok: false,
+          code: 'bad-value',
+          message: `${fix} does not look like a fix name`,
+          callsign,
+        };
+      }
+      commands.push({ kind: fixCommand, fix });
+      i += 1;
+      continue;
+    }
+
     const parsed = parseToken(token);
     if ('error' in parsed) return { ...parsed.error, callsign };
     commands.push(parsed);

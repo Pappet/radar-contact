@@ -12,7 +12,9 @@ import {
   pointInPolygon,
   predictsConflict,
   violatesMva,
+  wakeMinInTrailNm,
 } from '../src/sim/separation';
+import type { WakeCategory } from '../src/sim/aircraft';
 import type { Phase } from '../src/sim/phases';
 import type { Vec2 } from '../src/sim/geo';
 
@@ -217,5 +219,28 @@ describe('MVA (SPEC §8)', () => {
 
   it('ignores aircraft outside every sector', () => {
     expect(violatesMva(traffic('AAA111', { x: 99, y: 99 }, { altitude: 500 }), sectors)).toBe(false);
+  });
+});
+
+describe('wake in-trail minima on the final (SPEC §8, DoD M4)', () => {
+  const CATEGORIES: WakeCategory[] = ['L', 'M', 'H'];
+
+  it('matches the matrix for every leader/follower combination', () => {
+    // SPEC §8: behind H it is H 4 / M 5 / L 6; L behind M: 5; otherwise 3.
+    const expected: Record<WakeCategory, Record<WakeCategory, number>> = {
+      H: { H: 4, M: 5, L: 6 },
+      M: { H: 3, M: 3, L: 5 },
+      L: { H: 3, M: 3, L: 3 },
+    };
+    for (const leader of CATEGORIES) {
+      for (const follower of CATEGORIES) {
+        expect(wakeMinInTrailNm(leader, follower)).toBe(expected[leader][follower]);
+      }
+    }
+  });
+
+  it('keeps the plain radar minimum between equals', () => {
+    expect(wakeMinInTrailNm('M', 'M')).toBe(3);
+    expect(wakeMinInTrailNm('M', 'H')).toBe(3);
   });
 });

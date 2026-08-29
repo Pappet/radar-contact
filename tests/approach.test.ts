@@ -33,12 +33,14 @@ interface Setup {
   phase?: Phase;
   ias?: number;
   clearedIls?: boolean;
+  /** Key into aircraft.json — decides the wake category (M4). */
+  type?: string;
 }
 
 function approaching(state: SimState, callsign: string, setup: Setup): AircraftState {
   const ac = spawnAircraft(state, {
     callsign,
-    type: 'A320',
+    type: setup.type ?? 'A320',
     pos: onFinal(setup.distance, setup.lateral ?? 0),
     altitude: setup.altitude ?? 3000,
     heading: setup.track ?? COURSE,
@@ -281,6 +283,40 @@ describe('go-around triggers (SPEC §7, DoD M3)', () => {
     expect(events(drainEvents(state), 'goAround')).toEqual([
       { kind: 'goAround', callsign: 'BBB222', reason: 'spacing' },
     ]);
+  });
+
+  it('applies the wake matrix: a medium fires behind a heavy, not behind a medium (DoD M4)', () => {
+    // The spacing window opens at four miles, so the discriminating geometry
+    // is inside it: same gap, same follower — only the leader's wake differs.
+    const heavyState = createSimState({ seed: 19, airport });
+    const heavy = approaching(heavyState, 'AAA111', {
+      distance: 0.5, type: 'B77W', altitude: glidepathAt(0.5), phase: 'GS',
+    });
+    heavy.gateChecked = true;
+    const mediumBehindHeavy = approaching(heavyState, 'BBB222', {
+      distance: 3.8, altitude: glidepathAt(3.8), phase: 'GS',
+    });
+    mediumBehindHeavy.gateChecked = true;
+    updateApproach(heavyState, mediumBehindHeavy);
+    // 3.3 NM behind a heavy needs 5 — the medium goes around.
+    expect(mediumBehindHeavy.phase).toBe('GOAROUND');
+    expect(events(drainEvents(heavyState), 'goAround')).toEqual([
+      { kind: 'goAround', callsign: 'BBB222', reason: 'spacing' },
+    ]);
+
+    const mediumState = createSimState({ seed: 21, airport });
+    const medium = approaching(mediumState, 'CCC333', {
+      distance: 0.5, altitude: glidepathAt(0.5), phase: 'GS',
+    });
+    medium.gateChecked = true;
+    const mediumBehindMedium = approaching(mediumState, 'DDD444', {
+      distance: 3.8, altitude: glidepathAt(3.8), phase: 'GS',
+    });
+    mediumBehindMedium.gateChecked = true;
+    updateApproach(mediumState, mediumBehindMedium);
+    // The same 3.3 NM behind a medium needs only 3 — it stays on the ILS.
+    expect(mediumBehindMedium.phase).toBe('GS');
+    expect(events(drainEvents(mediumState), 'goAround')).toEqual([]);
   });
 
   it('does not judge spacing before four miles', () => {
