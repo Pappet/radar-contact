@@ -121,7 +121,7 @@ Geprüft wird die Ausführbarkeit **zum Ausführungszeitpunkt**, also nach der R
 
 ## §6 Pilotenmodell
 
-Reaktionsverzögerung je Transmission: Normalverteilung μ=3.5 s, σ=1 s, geclampt auf [2, 6] (seeded RNG, Sim-Zeit). Ablauf: ATC-Transmission (Event sofort) → nach Delay prüft der Pilot die Ausführbarkeit (§5) → Readback der angenommenen Commands bzw. „unable" je Ablehnungsgrund (Events) → angenommene Commands werden Targets. Hearback-Error (ab M4, Rate konfigurierbar, Default 0.03): genau ein numerischer Wert im Readback und in der Ausführung weicht ab (Höhe ±1000 ft oder Heading ±10°). Eine korrigierende Neuanweisung ist der normale Weg zur Behebung.
+Reaktionsverzögerung je Transmission: Normalverteilung μ=3.5 s, σ=1 s, geclampt auf [2, 6] (seeded RNG, Sim-Zeit). Ablauf: ATC-Transmission (Event sofort) → nach Delay prüft der Pilot die Ausführbarkeit (§5) → Readback der angenommenen Commands bzw. „unable" je Ablehnungsgrund (Events) → angenommene Commands werden Targets. Hearback-Error (ab M4, Rate konfigurierbar, Default 0.03): genau ein numerischer Wert im Readback und in der Ausführung weicht ab (Höhe ±1000 ft oder Heading ±10°). Eine korrigierende Neuanweisung ist der normale Weg zur Behebung. Die Rate gilt je Transmission (nicht je Command); der Wurf wird pro angenommener Transmission einmal gezogen, nur Heading und Altitude können verhört werden. Im Host konfigurierbar über `?hearback=0…1` (Default aus `sim/constants.ts`), im Test über `SimStateOptions.hearbackErrorRate`.
 
 ## §7 Phasen-FSM & ILS
 
@@ -131,6 +131,7 @@ Reaktionsverzögerung je Transmission: Normalverteilung μ=3.5 s, σ=1 s, geclam
 - **CLEARED_ILS** (nach `ils`-Command): fliegt aktuelle Targets weiter. **LOC-Capture**, wenn Querabstand zur verlängerten Anfluggrundlinie ≤ 0.5 NM **und** Schnittwinkel ≤ 30°. Danach folgt der Track dem Anflugkurs (137°).
 - **GS-Capture** nur von unten: wenn `altitude ≤ 318 × dist_NM` (3°-Gleitpfad, Schwelle = 0 ft). Danach VS so, dass der Gleitpfad gehalten wird; der Pilot reduziert selbstständig auf `vApp`, spätestens ab 5 NM.
 - **Go-Around** (Event mit reason): beim Passieren von 6 NM Final wird einmalig beides geprüft — nicht LOC-established ⇒ `notEstablished`, und mehr als 300 ft über dem Gleitpfad (`altitude > 318 × dist_NM + 300`) ⇒ `tooHigh`. Unabhängig davon: unterschreitet der Abstand zum Vordermann auf dem Final die Wake-Matrix bei ≤ 4 NM ⇒ `spacing`. Missed Approach: geradeaus steigen auf 4000 ft, dann Phase VECTOR (Lotse übernimmt wieder).
+- **HOLD** (`hold`-Command, M4): published Holding am Fix als Racetrack mit rechtsdrehenden 180°-Kurven. Einlauf: der Flieger fliegt direct zum Fix; beim Überflug (Capture-Radius) wird der überflogene Ground-Track als Einflugkurs genommen und rechts auf den Gegenkurs gedreht. Das Auslaufbein wird genau 1 min als windkorrigierter Track geflogen (Crab wie am Localizer), dann rechts zurück. Das Einlaufbein steuert wieder direct zum Fix und endet am Überflug — so zentriert sich die Haltung selbst statt vom Wind wegdriftet zu werden. Hold ersetzt eine ILS-Freigabe und stellt STAR-Flieger auf VECTOR; umgekehrt beendet jedes Heading-/Direct-/ILS-Kommando die Haltung, während Height und Speed erhalten bleiben. Haltende Flieger bleiben voll in Separation, STCA und MVA.
 - **HANDOFF** (`handoff`-Command, erlaubt ab LOC/GS und ≤ 10 NM Final): „contact tower", Flieger fliegt weiter, despawnt bei 1 NM als erfolgreich (`handoffComplete`, Phase DONE). Handoff vergessen ⇒ Flieger landet trotzdem, zählt aber nicht als sauber übergeben (Score §11.4).
 
 ## §8 Separation, Wake, STCA, MVA
@@ -160,6 +161,7 @@ ATC-Transmissions beginnen mit dem Callsign („SWR34K, turn left heading 270"),
 | altitude | "descend/climb (and maintain) 5000 feet" | "descend 5000 feet, SWR34K" |
 | speed | "reduce/increase speed 180 knots" / "resume normal speed" | "speed 180 knots, SWR34K" |
 | direct | "proceed direct AMIKI" | "direct AMIKI, SWR34K" |
+| hold | "hold at AMIKI as published" | "hold at AMIKI, SWR34K" |
 | ils | "cleared ILS approach runway 14" | "cleared ILS 14, SWR34K" |
 | handoff | "contact tower 118 decimal 1" | "tower 118 decimal 1, SWR34K, good day" |
 | squawk | "squawk 4271" | "squawk 4271, SWR34K" |
@@ -182,6 +184,7 @@ Mehrere Commands in einer Transmission werden mit Kommas gereiht („turn left h
 | `D50` / `C120` | descend/climb, Wert in 100 ft (5000 / 12 000 ft) |
 | `S180` / `SN` | speed 180 / resume normal |
 | `DCT AMIKI` | direct AMIKI |
+| `HOLD AMIKI` | hold at AMIKI (Racetrack, 1-min-Legs, rechts) |
 | `ILS14` | cleared ILS runway 14 |
 | `TWR` | handoff |
 | `SQ4271` | squawk 4271 |
