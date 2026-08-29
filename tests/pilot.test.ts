@@ -3,7 +3,7 @@ import { dispatch } from '../src/sim/commands';
 import { PILOT_DELAY_MAX_S, PILOT_DELAY_MIN_S } from '../src/sim/constants';
 import type { SimEventRecord } from '../src/sim/events';
 import { spawnAircraft } from '../src/sim/scenario';
-import { createSimState, drainEvents, tick, type SimState } from '../src/sim/state';
+import { createSimState, drainEvents, nextRandom, tick, type SimState } from '../src/sim/state';
 import { pilotDelaySeconds } from '../src/sim/pilot';
 
 function setup(altitude = 8000): { state: SimState } {
@@ -243,6 +243,49 @@ describe('hearback errors (SPEC §6, DoD M4)', () => {
 
     expect(transmissions(drainEvents(state))).toEqual(['speed 220 knots, SWR34K']);
     expect(state.aircraft[0]!.target.speed).toBe(220);
+  });
+
+  it('forget the mishearing once a clean transmission comes through', () => {
+    const { state } = eagerSetup();
+    dispatch(state, 'SWR34K', [{ kind: 'heading', deg: 270, turn: 'L' }]);
+    drainEvents(state);
+    for (let i = 0; i < PILOT_DELAY_MAX_S + 1; i += 1) tick(state);
+    drainEvents(state);
+    expect(state.aircraft[0]!.pilot.hearbackTaken).toBeDefined();
+
+    // Nothing to mishear here — the stale note must not survive it.
+    dispatch(state, 'SWR34K', [{ kind: 'speed', kt: 200 }]);
+    drainEvents(state);
+    for (let i = 0; i < PILOT_DELAY_MAX_S + 1; i += 1) tick(state);
+    drainEvents(state);
+    expect(state.aircraft[0]!.pilot.hearbackTaken).toBeUndefined();
+  });
+
+  it('consume no extra RNG at rate 0, so pre-M4 seeds replay unchanged', () => {
+    const build = (): SimState => {
+      const state = createSimState({ seed: 77, hearbackErrorRate: 0 });
+      spawnAircraft(state, {
+        callsign: 'SWR34K',
+        type: 'A320',
+        pos: { x: -30, y: 2 },
+        altitude: 8000,
+        heading: 90,
+        ias: 250,
+      });
+      drainEvents(state);
+      return state;
+    };
+
+    const dispatched = build();
+    dispatch(dispatched, 'SWR34K', [{ kind: 'heading', deg: 270, turn: 'L' }]);
+    for (let i = 0; i < PILOT_DELAY_MAX_S + 1; i += 1) tick(dispatched);
+
+    // The reaction delay is one randomNormal — exactly two draws. Rate 0
+    // must not consume a single draw beyond that.
+    const reference = build();
+    nextRandom(reference);
+    nextRandom(reference);
+    expect(dispatched.rngState).toBe(reference.rngState);
   });
 
   it('statistical sanity: rate 0.5 deviates about half of the clearances', () => {

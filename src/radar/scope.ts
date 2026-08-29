@@ -42,6 +42,8 @@ type Drag =
 interface Measure {
   from: Vec2;
   to: Vec2;
+  /** False until the pointer actually moved — a bare right-click measures nothing. */
+  moved: boolean;
 }
 
 export function createScope(
@@ -121,10 +123,8 @@ export function createScope(
     // SPEC §9: the right button measures from blip to blip.
     if (ev.button === 2) {
       const hit = blipAt(point);
-      measure = {
-        from: hit ? hit.pos : screenToNm(transform, viewport, point),
-        to: hit ? hit.pos : screenToNm(transform, viewport, point),
-      };
+      const at = hit ? hit.pos : screenToNm(transform, viewport, point);
+      measure = { from: at, to: at, moved: false };
       canvas.setPointerCapture(ev.pointerId);
       return;
     }
@@ -158,6 +158,7 @@ export function createScope(
       const point = pointerPos(ev);
       const hit = blipAt(point);
       measure.to = hit ? hit.pos : screenToNm(transform, viewport, point);
+      measure.moved = true;
       return;
     }
     if (!drag) return;
@@ -181,8 +182,12 @@ export function createScope(
 
   function onPointerUp(ev: PointerEvent): void {
     if (canvas.hasPointerCapture(ev.pointerId)) canvas.releasePointerCapture(ev.pointerId);
-    // A finished measurement stays on the scope until the next left click.
-    if (ev.button === 2) return;
+    // A finished measurement stays on the scope until the next left click —
+    // but a bare right-click without a drag never measured anything.
+    if (ev.button === 2) {
+      if (measure && !measure.moved) measure = null;
+      return;
+    }
     if (drag?.mode === 'pan' && !drag.moved) select(null);
     drag = null;
   }

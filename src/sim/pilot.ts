@@ -126,6 +126,9 @@ function isApproachPhase(phase: Phase): boolean {
  * Transmissions without a numeric value cannot be misheard.
  */
 export function applyHearbackError(state: SimState, accepted: Command[]): Command[] {
+  // Rate 0 must stay RNG-neutral: no roll, no draw, so seeds replay exactly
+  // as they did before the hearback feature existed.
+  if (state.hearbackErrorRate <= 0) return accepted;
   if (nextRandom(state) >= state.hearbackErrorRate) return accepted;
 
   const numeric = accepted
@@ -163,6 +166,9 @@ export function processPilotQueue(state: SimState, ac: AircraftState): void {
   const profile = aircraftProfile(ac.type);
 
   for (const entry of due) {
+    // A new transmission supersedes whatever the pilot misheard last time.
+    delete ac.pilot.hearbackTaken;
+
     const accepted: Command[] = [];
     const refusals: string[] = [];
 
